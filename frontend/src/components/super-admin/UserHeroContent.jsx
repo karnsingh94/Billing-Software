@@ -1,0 +1,236 @@
+import { FiSearch } from "react-icons/fi";
+import { users } from "../../components/DymiData";
+import { useEffect, useState } from "react";
+
+const UserHeroContent = ({ setEditShowForm, setEditData }) => {
+  const [user, setUser] = useState([]);
+  const [actionShow, setActionShow] = useState(null);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const localData = JSON.parse(localStorage.getItem("adminUser"));
+    if (localData && localData.length > 0) {
+      setUser(localData);
+    } else {
+      setUser(users);
+    }
+  }, []);
+
+  // ------------------------delete data------------------------
+
+  const deleteData = (id) => {
+    const filterData = user.filter((item) => item.id !== id);
+    setUser(filterData);
+  };
+
+  // -----------------------------Action Show------------------------
+  useEffect(() => {
+    const handleClick = () => {
+      setActionShow(null);
+    };
+    document.addEventListener("click", handleClick);
+
+    return () => {
+      document.removeEventListener("click", handleClick);
+    };
+  }, []);
+
+  //  --------------------- search-----------------------
+  const searchFilter = user.filter((item) =>
+    item.name.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  return (
+    <div className="mt-7    rounded-xl bg-white shadow-sm pt-5 pb-5">
+      {/* Search, Status, Filter */}
+      <div className="w-full pl-5 pr-5 border-b border-gray-300 pb-3">
+        <div className="relative ">
+          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search user..."
+            className=" w-full md:w-110  pl-10 pr-4 py-2 border border-gray-300 rounded-xl outline-none font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+      </div>
+
+      {/* content Cate */}
+      <div className="mt-3 hidden md:bock">
+        <div className="grid grid-cols-5 bg-white pt-5 pr-5 pl-5 pb-2 font-semibold text-gray-700 border-b  border-gray-300">
+          <div className="col-span-2 ">
+            <h1>Name</h1>
+          </div>
+          <div>
+            <h1 className="pl-10">Email</h1>
+          </div>
+          <div className="text-center">
+            <h1>JoinDate</h1>
+          </div>
+          <div className="text-center">
+            <h1>Action</h1>
+          </div>
+        </div>
+
+        <div>
+          {searchFilter.map((item, idx) => (
+            <div
+              key={item.id}
+              className="grid grid-cols-5 items-center bg-white px-5 py-3 border-b border-gray-300"
+            >
+              {/* Category */}
+              <div className="flex items-center gap-3 col-span-2">
+                <img
+                  src={item.image}
+                  alt={item.name}
+                  className="w-12 h-12 rounded-full object-cover border"
+                />
+                <p className="font-medium text-gray-800">{item.name}</p>
+              </div>
+
+              {/* Email */}
+              <div className="pl-[-40px] ">
+                <p>{item.email}</p>
+              </div>
+              {/* joinDatew */}
+              <div className="flex pl-15">
+                <p>{item.joinDate}</p>
+              </div>
+
+              {/* Action */}
+              <div className="relative flex justify-center">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActionShow(actionShow === idx ? null : idx);
+                  }}
+                  className={`w-8 h-8 rounded-full  ${
+                    actionShow === idx
+                      ? "bg-slate-600 text-white "
+                      : "hover:bg-slate-200"
+                  } text-xl`}
+                >
+                  ⋮
+                </button>
+
+                {actionShow === idx && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute top-5 right-30 w-32 py-1 bg-white rounded-lg shadow-lg border border-gray-300 z-50"
+                  >
+                    <button className="block w-full text-left px-4 py-1 hover:bg-gray-200">
+                      View
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setEditShowForm(true);
+                        setActionShow(null);
+                        setEditData(item);
+                      }}
+                      className="block w-full text-left px-4 py-1 hover:bg-gray-200"
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        deleteData(item.id);
+                        setActionShow(null);
+                      }}
+                      className="block w-full text-left px-4 py-1 text-red-600 hover:bg-red-100 "
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+
+      {/* ======================Mobile-Menu====================== */}
+      <div className="block md:hidden">
+        {searchFilter.map((item, idx) => (
+          <div key={idx} className="flex flex-col gap-3 p-3 border-b border-gray-300">
+            <div className="flex items-center justify-between ">
+              <h1>Name</h1>
+              <div className="flex items-center gap-3 col-span-2">
+                <img
+                  src={item.image}
+                  alt={item.name}
+                  className="w-12 h-12 rounded-full object-cover border"
+                />
+                <p className="font-medium text-gray-800">{item.name}</p>
+              </div>
+            </div>
+               <div className="flex items-center justify-between ">
+              <h1 >Email</h1>
+               <p>{item.email}</p>
+            </div>
+           <div className="flex items-center justify-between ">
+              <h1>JoinDate</h1>
+                 <p>{item.joinDate}</p>
+            </div>
+            <div className="flex items-center justify-between ">
+              <h1>Action</h1>
+               {/* Action */}
+              <div className="relative flex justify-center">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActionShow(actionShow === idx ? null : idx);
+                  }}
+                  className={`w-8 h-8 rounded-full  ${
+                    actionShow === idx
+                      ? "bg-slate-600 text-white "
+                      : "hover:bg-slate-200"
+                  } text-xl`}
+                >
+                  ⋮
+                </button>
+
+                {actionShow === idx && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute top-5 right-10 w-32 py-1 bg-white rounded-lg shadow-lg border border-gray-300 z-50"
+                  >
+                    <button className="block w-full text-left px-4 py-1 hover:bg-gray-200">
+                      View
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setEditShowForm(true);
+                        setActionShow(null);
+                        setEditData(item);
+                      }}
+                      className="block w-full text-left px-4 py-1 hover:bg-gray-200"
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        deleteData(item.id);
+                        setActionShow(null);
+                      }}
+                      className="block w-full text-left px-4 py-1 text-red-600 hover:bg-red-100 "
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default UserHeroContent;
