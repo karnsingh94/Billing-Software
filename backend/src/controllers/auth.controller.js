@@ -3,9 +3,7 @@ import bcrypt from "bcryptjs";
 import prisma from "../db/db.js";
 import jwt from "jsonwebtoken";
 
-
-
- const signup = async (req, res) => {
+const signup = async (req, res) => {
   try {
     const { fullName, email, password, phone, location } = req.body;
 
@@ -53,10 +51,7 @@ import jwt from "jsonwebtoken";
 
     const existingUser = await prisma.user.findFirst({
       where: {
-        OR: [
-          { email: email.trim().toLowerCase() },
-          { phone: phone.trim() },
-        ],
+        OR: [{ email: email.trim().toLowerCase() }, { phone: phone.trim() }],
       },
     });
 
@@ -76,7 +71,7 @@ import jwt from "jsonwebtoken";
         password: hashedPassword,
         phone: phone.trim(),
         location: location.trim(),
-        // role: "SUPER_ADMIN",
+          role: "SUPER_ADMIN",
         createdById: null,
       },
     });
@@ -87,7 +82,6 @@ import jwt from "jsonwebtoken";
       success: true,
       message: "Super admin created successfully",
       superAdmin: superAdminWithoutPassword,
-     
     });
   } catch (error) {
     return res.status(500).json({
@@ -120,7 +114,6 @@ const login = async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
     });
-   
 
     if (!user || !user.password) {
       return res.status(400).json({
@@ -143,7 +136,7 @@ const login = async (req, res) => {
         id: user.id,
         email: user.email,
         role: user.role,
-        parentId: user.createdById || null
+        parentId: user.createdById || null,
       },
       process.env.JWT_SECRET,
       {
@@ -172,10 +165,7 @@ const login = async (req, res) => {
   }
 };
 
-
-
 // ===============================create Admin==============================
-
 
 const createAdmin = async (req, res) => {
   try {
@@ -190,10 +180,7 @@ const createAdmin = async (req, res) => {
 
     const existingUser = await prisma.user.findFirst({
       where: {
-        OR: [
-          { email: email.trim().toLowerCase() },
-          { phone: phone.trim() },
-        ],
+        OR: [{ email: email.trim().toLowerCase() }, { phone: phone.trim() }],
       },
     });
 
@@ -235,10 +222,7 @@ const createAdmin = async (req, res) => {
   }
 };
 
-
-
 // ===============================Admin==============================
-
 
 const createUser = async (req, res) => {
   try {
@@ -288,10 +272,7 @@ const createUser = async (req, res) => {
     // 6) email/phone already exists check
     const existingUser = await prisma.user.findFirst({
       where: {
-        OR: [
-          { email: email.trim().toLowerCase() },
-          { phone: phone.trim() },
-        ],
+        OR: [{ email: email.trim().toLowerCase() }, { phone: phone.trim() }],
       },
     });
 
@@ -334,9 +315,7 @@ const createUser = async (req, res) => {
   }
 };
 
-
 // ============================logout=============================
-
 
 const logout = async (req, res) => {
   res.clearCookie("accessToken");
@@ -358,5 +337,4 @@ const getMe = async (req, res) => {
   });
 };
 
-
-export { signup, login , createAdmin , createUser, logout , getMe};
+export { signup, login, createAdmin, createUser, logout, getMe };
