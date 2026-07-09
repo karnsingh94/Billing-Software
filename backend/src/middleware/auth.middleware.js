@@ -1,48 +1,62 @@
 import jwt from "jsonwebtoken";
+import prisma from "../db/db.js";
 
-export const isAuth = (req, res, next) => {
+const isAuth = async (req, res, next) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
+     const token =
+      req.cookies?.accessToken ||
+      req.headers.authorization?.split(" ")[1];
 
     if (!token) {
       return res.status(401).json({
         success: false,
-        message: "Token not found",
+       message: "Unauthorized. Token missing.",
       });
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+   const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    req.user = user;
 
     next();
   } catch (error) {
     return res.status(401).json({
       success: false,
-      message: "Invalid token",
+     message: "Invalid token.",
     });
   }
 };
 
-export const authMiddleware = isAuth;
-
-export const isSuperAdmin = (req, res, next) => {
-  if (req.user?.role !== "SUPER_ADMIN") {
+const isSuperAdmin = (req, res, next) => {
+  if (req.user.role !== "SUPER_ADMIN") {
     return res.status(403).json({
       success: false,
-      message: "Only super admin allowed",
+       message: "Only super admin can create admin.",
     });
   }
 
   next();
 };
 
-export const isAdmin = (req, res, next) => {
-  if (req.user?.role !== "ADMIN" && req.user?.role !== "SUPER_ADMIN") {
+ const isAdmin = (req, res, next) => {
+  if (req.user.role !== "ADMIN") {
     return res.status(403).json({
       success: false,
-      message: "Only admin allowed",
+      message: "Only  admin can create user.",
     });
   }
 
   next();
 };
+
+export { isAuth ,  isSuperAdmin , isAdmin };

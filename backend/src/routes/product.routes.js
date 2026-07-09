@@ -20,7 +20,7 @@ import upload from "../middleware/upload.middleware.js";
 const router = express.Router();
 
 router.post(
-  "/",
+  "/create-product",
   isAuth,
   upload.single("productImage"),
   validate(createProductSchema),
