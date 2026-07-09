@@ -39,7 +39,7 @@ const UserHeroContent = ({ setEditShowForm, setEditData }) => {
   const searchFilter = user.filter((item) =>
     item.name.toLowerCase().includes(search.toLowerCase()),
   );
-
+console.log(searchFilter)
   return (
     <div className="mt-7    rounded-xl bg-white shadow-sm pt-5 pb-5">
       {/* Search, Status, Filter */}
@@ -57,7 +57,7 @@ const UserHeroContent = ({ setEditShowForm, setEditData }) => {
       </div>
 
       {/* content Cate */}
-      <div className="mt-3 hidden md:bock">
+      <div className="mt-3 hidden md:block">
         <div className="grid grid-cols-5 bg-white pt-5 pr-5 pl-5 pb-2 font-semibold text-gray-700 border-b  border-gray-300">
           <div className="col-span-2 ">
             <h1>Name</h1>
