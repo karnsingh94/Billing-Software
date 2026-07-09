@@ -14,7 +14,7 @@ import {
 } from "../schema/product.schema.js";
 
 import { validate } from "../middleware/validate.middleware.js";
-import { isAuth } from "../middleware/auth.middleware.js";
+
 import upload from "../middleware/upload.middleware.js";
 import { isAuth, isSuperAdmin, isAdmin , isProduct} from "../middleware/auth.middleware.js"
 

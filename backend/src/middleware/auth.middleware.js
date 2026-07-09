@@ -64,7 +64,7 @@ const isSuperAdmin = (req, res, next) => {
 
 
 const isProduct = (req, res, next) => {
-  if (req.user.role !== "ADMIN || USER") {
+  if (req.user.role !== "ADMIN" && req.user.role !== "USER") {
     return res.status(403).json({
       success: false,
        message: "Only admin or user can create product.",
