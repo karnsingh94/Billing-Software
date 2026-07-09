@@ -1,5 +1,3 @@
-
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -107,8 +105,8 @@ model Invoice {
 
   items     InvoiceItem[]
   discounts Discount[]
-  payments  Payment[]
-  returns   Return[]
+
+  returns Return[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -143,8 +141,19 @@ model Discount {
 }
 
 model Payment {
-  id            String        @id @default(uuid())
-  customerName  String
+  id           String @id @default(uuid())
+  customerName String
+  productName  String
+
+  quantity   Int
+  price      Float
+  totalPrice Float
+
+  discountValue   Float @default(0)
+  discountPercent Float @default(0)
+  discountAmount  Float @default(0)
+  finalPrice      Float @default(0)
+
   paymentNumber String        @unique
   paymentDate   DateTime      @default(now())
   paymentMethod String
@@ -154,9 +163,6 @@ model Payment {
 
   createdBy String?
   createdAt DateTime @default(now())
-
-  invoiceId String
-  invoice   Invoice @relation(fields: [invoiceId], references: [id])
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
