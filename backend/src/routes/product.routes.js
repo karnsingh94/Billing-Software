@@ -16,12 +16,13 @@ import {
 import { validate } from "../middleware/validate.middleware.js";
 import { isAuth } from "../middleware/auth.middleware.js";
 import upload from "../middleware/upload.middleware.js";
+import { isAuth, isSuperAdmin, isAdmin , isProduct} from "../middleware/auth.middleware.js"
 
 const router = express.Router();
 
 router.post(
   "/create-product",
-  isAuth,
+  isAuth,isProduct,
   upload.single("productImage"),
   validate(createProductSchema),
   createProductController

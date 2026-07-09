@@ -59,4 +59,19 @@ const isSuperAdmin = (req, res, next) => {
   next();
 };
 
-export { isAuth ,  isSuperAdmin , isAdmin };
+
+// =================Product====================
+
+
+const isProduct = (req, res, next) => {
+  if (req.user.role !== "ADMIN || USER") {
+    return res.status(403).json({
+      success: false,
+       message: "Only admin or user can create product.",
+    });
+  }
+
+  next();
+}
+
+export { isAuth ,  isSuperAdmin , isAdmin , isProduct};
