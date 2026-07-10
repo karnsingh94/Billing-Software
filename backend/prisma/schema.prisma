@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// =========================
+// ENUMS
+// =========================
+
 enum Role {
   SUPER_ADMIN
   ADMIN
@@ -18,6 +22,22 @@ enum PaymentStatus {
   PENDING
   PARTIAL
   REFUNDED
+}
+
+enum InvoiceStatus {
+  PENDING
+  PARTIAL
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  ONLINE
+  BANK_TRANSFER
 }
 
 enum RefundStatus {
@@ -32,6 +52,10 @@ enum DiscountType {
   FIXED
 }
 
+// =========================
+// USER
+// =========================
+
 model User {
   id       String  @id @default(uuid())
   fullName String
@@ -45,11 +69,12 @@ model User {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  // kis user ne is user ko create kiya
+  // Kis user ne is user ko create kiya
   createdById String?
-  creator     User?   @relation("UserCreator", fields: [createdById], references: [id])
 
-  // is user ne kitne users create kiye
+  creator User? @relation("UserCreator", fields: [createdById], references: [id])
+
+  // Is user ne kitne users create kiye
   createdUsers User[] @relation("UserCreator")
 
   products Product[]
@@ -58,6 +83,10 @@ model User {
   returns  Return[]
   audits   Audit[]
 }
+
+// =========================
+// PRODUCT
+// =========================
 
 model Product {
   id           String  @id @default(uuid())
@@ -78,39 +107,53 @@ model Product {
   user   User   @relation(fields: [userId], references: [id])
 
   invoiceItems InvoiceItem[]
-  returns      Return[]
+
+  // Added because Payment has productId
+  payments Payment[]
+
+  returns Return[]
 }
 
+// =========================
+// INVOICE
+// =========================
+
 model Invoice {
-  id            String   @id @default(uuid())
-  invoiceNumber String   @unique
-  customerName  String
-  invoiceDate   DateTime @default(now())
+  id            String @id @default(uuid())
+  invoiceNumber String @unique
 
-  subTotal       Float @default(0)
-  discountValue  Float @default(0)
-  discountAmount Float @default(0)
-  gst            Float @default(0)
-  grandTotal     Float @default(0)
-  paidAmount     Float @default(0)
-  dueAmount      Float @default(0)
-
-  paymentMethod String?
-  paymentStatus PaymentStatus @default(PENDING)
-
-  createdBy String?
+  // Optional one-to-one payment relation
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id])
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
+  customerName String
+  currency     String @default("INR")
+
+  subTotal       Decimal @default(0) @db.Decimal(15, 2)
+  discountAmount Decimal @default(0) @db.Decimal(15, 2)
+  totalAmount    Decimal @default(0) @db.Decimal(15, 2)
+  paidAmount     Decimal @default(0) @db.Decimal(15, 2)
+  dueAmount      Decimal @default(0) @db.Decimal(15, 2)
+
+  status InvoiceStatus @default(PENDING)
+
   items     InvoiceItem[]
   discounts Discount[]
-
-  returns Return[]
+  returns   Return[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([paymentId])
+  @@index([userId])
 }
+
+// =========================
+// INVOICE ITEM
+// =========================
 
 model InvoiceItem {
   id String @id @default(uuid())
@@ -127,6 +170,10 @@ model InvoiceItem {
   product   Product @relation(fields: [productId], references: [id])
 }
 
+// =========================
+// DISCOUNT
+// =========================
+
 model Discount {
   id             String       @id @default(uuid())
   discountType   DiscountType
@@ -140,33 +187,50 @@ model Discount {
   updatedAt DateTime @updatedAt
 }
 
+// =========================
+// PAYMENT
+// =========================
+
 model Payment {
-  id           String @id @default(uuid())
-  customerName String
-  productName  String
-
-  quantity   Int
-  price      Float
-  totalPrice Float
-
-  discountValue   Float @default(0)
-  discountPercent Float @default(0)
-  discountAmount  Float @default(0)
-  finalPrice      Float @default(0)
-
-  paymentNumber String        @unique
-  paymentDate   DateTime      @default(now())
-  paymentMethod String
-  amount        Float
-  currency      String        @default("INR")
-  paymentStatus PaymentStatus @default(PENDING)
-
-  createdBy String?
-  createdAt DateTime @default(now())
+  id            String @id @default(uuid())
+  paymentNumber String @unique
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  customerName String
+  quantity     Int
+
+  price      Decimal @db.Decimal(15, 2)
+  totalPrice Decimal @db.Decimal(15, 2)
+
+  discountValue   Decimal @default(0) @db.Decimal(15, 2)
+  discountPercent Decimal @default(0) @db.Decimal(5, 2)
+  discountAmount  Decimal @default(0) @db.Decimal(15, 2)
+
+  finalPrice Decimal @db.Decimal(15, 2)
+
+  paymentMethod PaymentMethod
+  amount        Decimal       @db.Decimal(15, 2)
+  currency      String        @default("INR")
+  paymentStatus PaymentStatus @default(PENDING)
+
+  // Opposite relation of Invoice.payment
+  invoice Invoice?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([productId])
 }
+
+// =========================
+// RETURN
+// =========================
 
 model Return {
   id           String   @id @default(uuid())
@@ -193,6 +257,10 @@ model Return {
   invoiceId String?
   invoice   Invoice? @relation(fields: [invoiceId], references: [id])
 }
+
+// =========================
+// AUDIT
+// =========================
 
 model Audit {
   id       String @id @default(uuid())
