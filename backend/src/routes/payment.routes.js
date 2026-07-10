@@ -1,30 +1,95 @@
-import express from "express";
+import { Router } from "express";
 
 import {
   createPaymentController,
   getAllPaymentsController,
   getPaymentByIdController,
-  deletePaymentController,
+  getPaymentByNumberController,
+  updatePaymentStatusController,
+  refundPaymentController,
+  getPaymentStatsController,
 } from "../controllers/payment.controller.js";
 
-import { createPaymentSchema } from "../schema/payment.schema.js";
+import {
+  createPaymentSchema,
+  updatePaymentStatusSchema,
+  refundPaymentSchema,
+  paymentQuerySchema,
+} from "../schema/payment.schema.js";
 
 import { validate } from "../middleware/validate.middleware.js";
+
 import { isAuth } from "../middleware/auth.middleware.js";
 
-const router = express.Router();
+const router = Router();
 
+/**
+ * All payment APIs require login
+ */
+router.use(isAuth);
+
+/**
+ * Create payment
+ */
 router.post(
   "/",
-  isAuth,
   validate(createPaymentSchema),
   createPaymentController
 );
 
-router.get("/", isAuth, getAllPaymentsController);
+/**
+ * Payment statistics
+ *
+ * Keep before /:paymentId
+ */
+router.get(
+  "/stats",
+  getPaymentStatsController
+);
 
-router.get("/:id", isAuth, getPaymentByIdController);
+/**
+ * Get payment by payment number
+ */
+router.get(
+  "/number/:paymentNumber",
+  getPaymentByNumberController
+);
 
-router.delete("/:id", isAuth, deletePaymentController);
+/**
+ * Get all payments
+ */
+router.get(
+  "/",
+  validate(paymentQuerySchema),
+  getAllPaymentsController
+);
+
+/**
+ * Update payment status
+ */
+router.patch(
+  "/:paymentId/status",
+  validate(updatePaymentStatusSchema),
+  updatePaymentStatusController
+);
+
+/**
+ * Refund payment
+ */
+router.post(
+  "/:paymentId/refund",
+  validate(refundPaymentSchema),
+  refundPaymentController
+);
+
+/**
+ * Get payment by ID
+ *
+ * Keep at bottom
+ */
+router.get(
+  "/:paymentId",
+  getPaymentByIdController
+);
 
 export default router;
