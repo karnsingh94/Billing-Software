@@ -1,4 +1,5 @@
 import express from "express";
+
 import {
   createDiscount,
   getAllDiscounts,
@@ -7,12 +8,25 @@ import {
   deleteDiscount,
 } from "../controllers/discount.controller.js";
 
+import { isAuth } from "../middleware/auth.middleware.js";
+// import { isAdmin } from "../middleware/isAdmin.js";
+
 const router = express.Router();
 
-router.post("/create-discount", createDiscount);
-router.get("/get-all", getAllDiscounts);
-router.get("/get/:id", getDiscountById);
-router.put("/update/:id", updateDiscount);
-router.delete("/delete/:id", deleteDiscount);
+// Create discount
+router.post("/create-discount", isAuth,  createDiscount);
+
+// Get all discounts
+router.get("/get-allDiscount", isAuth, getAllDiscounts);
+
+// Get discount by id
+router.get("/getDiscount/:id", isAuth, getDiscountById);
+
+// Update discount
+router.put("/update-discount/:id", isAuth, updateDiscount);
+
+// Delete discount
+router.delete("/delete-discount/:id", isAuth, deleteDiscount);
+
 
 export default router;

@@ -1,60 +1,99 @@
-import prisma from "../db/db.js";
+import  prisma  from "../db/db.js";
 
-// discount calculate function
-const calculateDiscountAmount = (discountType, discountValue, invoiceTotal) => {
-  if (discountType === "PERCENTAGE") {
-    return (invoiceTotal * discountValue) / 100;
-  }
+// ================= CREATE DISCOUNT =================
 
-  if (discountType === "FIXED") {
-    return discountValue;
-  }
-
-  return 0;
-};
-
-// CREATE DISCOUNT
 export const createDiscount = async (req, res) => {
   try {
-    const { discountType, discountValue, invoiceId } = req.body;
+    const {
+      discountType,
+      discountValue,
+      minAmount,
+      maxDiscountAmount,
+      discountAmount,
+      invoiceId,
+    } = req.body;
 
-    if (!discountType || !discountValue || !invoiceId) {
+    if (!discountType || discountValue === undefined) {
       return res.status(400).json({
         success: false,
-        message: "discountType, discountValue and invoiceId are required",
+        message: "discountType and discountValue are required",
       });
     }
 
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: invoiceId },
-    });
-
-    if (!invoice) {
-      return res.status(404).json({
+    if (!["PERCENTAGE", "FIXED"].includes(discountType)) {
+      return res.status(400).json({
         success: false,
-        message: "Invoice not found",
+        message: "discountType must be PERCENTAGE or FIXED",
       });
     }
 
-    const discountAmount = calculateDiscountAmount(
-      discountType,
-      Number(discountValue),
-      Number(invoice.total)
-    );
+    if (Number(discountValue) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "discountValue must be greater than 0",
+      });
+    }
+
+    // Percentage 100 se jyada nahi hona chahiye
+    if (
+      discountType === "PERCENTAGE" &&
+      Number(discountValue) > 100
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Percentage discount cannot be greater than 100",
+      });
+    }
+
+    // Agar invoiceId diya hai to invoice check karo
+    if (invoiceId) {
+      const invoice = await prisma.invoice.findUnique({
+        where: {
+          id: invoiceId,
+        },
+      });
+
+      if (!invoice) {
+        return res.status(404).json({
+          success: false,
+          message: "Invoice not found",
+        });
+      }
+    }
 
     const discount = await prisma.discount.create({
       data: {
         discountType,
         discountValue: Number(discountValue),
-        discountAmount,
-        invoiceId,
+
+        minAmount:
+          minAmount !== undefined && minAmount !== null
+            ? Number(minAmount)
+            : null,
+
+        maxDiscountAmount:
+          maxDiscountAmount !== undefined &&
+          maxDiscountAmount !== null
+            ? Number(maxDiscountAmount)
+            : null,
+
+        discountAmount:
+          discountAmount !== undefined &&
+          discountAmount !== null
+            ? Number(discountAmount)
+            : null,
+
+        invoiceId: invoiceId || null,
+      },
+      include: {
+        invoice: true,
       },
     });
 
     return res.status(201).json({
       success: true,
       message: "Discount created successfully",
-      discount,
+      data: discount,
     });
   } catch (error) {
     return res.status(500).json({
@@ -64,7 +103,8 @@ export const createDiscount = async (req, res) => {
   }
 };
 
-// GET ALL DISCOUNTS
+// ================= GET ALL DISCOUNTS =================
+
 export const getAllDiscounts = async (req, res) => {
   try {
     const discounts = await prisma.discount.findMany({
@@ -78,7 +118,9 @@ export const getAllDiscounts = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      discounts,
+      message: "All discounts fetched successfully",
+      total: discounts.length,
+      data: discounts,
     });
   } catch (error) {
     return res.status(500).json({
@@ -88,13 +130,16 @@ export const getAllDiscounts = async (req, res) => {
   }
 };
 
-// GET SINGLE DISCOUNT
+// ================= GET DISCOUNT BY ID =================
+
 export const getDiscountById = async (req, res) => {
   try {
     const { id } = req.params;
 
     const discount = await prisma.discount.findUnique({
-      where: { id },
+      where: {
+        id,
+      },
       include: {
         invoice: true,
       },
@@ -109,7 +154,8 @@ export const getDiscountById = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      discount,
+      message: "Discount fetched successfully",
+      data: discount,
     });
   } catch (error) {
     return res.status(500).json({
@@ -119,62 +165,134 @@ export const getDiscountById = async (req, res) => {
   }
 };
 
-// UPDATE DISCOUNT
+// ================= UPDATE DISCOUNT =================
+
 export const updateDiscount = async (req, res) => {
   try {
     const { id } = req.params;
-    const { discountType, discountValue, invoiceId } = req.body;
 
-    const oldDiscount = await prisma.discount.findUnique({
-      where: { id },
+    const {
+      discountType,
+      discountValue,
+      minAmount,
+      maxDiscountAmount,
+      discountAmount,
+      invoiceId,
+    } = req.body;
+
+    const existingDiscount = await prisma.discount.findUnique({
+      where: {
+        id,
+      },
     });
 
-    if (!oldDiscount) {
+    if (!existingDiscount) {
       return res.status(404).json({
         success: false,
         message: "Discount not found",
       });
     }
 
-    const finalInvoiceId = invoiceId || oldDiscount.invoiceId;
-
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: finalInvoiceId },
-    });
-
-    if (!invoice) {
-      return res.status(404).json({
+    if (
+      discountType &&
+      !["PERCENTAGE", "FIXED"].includes(discountType)
+    ) {
+      return res.status(400).json({
         success: false,
-        message: "Invoice not found",
+        message: "discountType must be PERCENTAGE or FIXED",
       });
     }
 
-    const finalDiscountType = discountType || oldDiscount.discountType;
+    if (
+      discountValue !== undefined &&
+      Number(discountValue) <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "discountValue must be greater than 0",
+      });
+    }
+
+    const finalDiscountType =
+      discountType || existingDiscount.discountType;
+
     const finalDiscountValue =
       discountValue !== undefined
         ? Number(discountValue)
-        : oldDiscount.discountValue;
+        : existingDiscount.discountValue;
 
-    const discountAmount = calculateDiscountAmount(
-      finalDiscountType,
-      finalDiscountValue,
-      Number(invoice.total)
-    );
+    if (
+      finalDiscountType === "PERCENTAGE" &&
+      finalDiscountValue > 100
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Percentage discount cannot be greater than 100",
+      });
+    }
+
+    // Agar naya invoiceId diya hai to invoice check karo
+    if (invoiceId) {
+      const invoice = await prisma.invoice.findUnique({
+        where: {
+          id: invoiceId,
+        },
+      });
+
+      if (!invoice) {
+        return res.status(404).json({
+          success: false,
+          message: "Invoice not found",
+        });
+      }
+    }
 
     const updatedDiscount = await prisma.discount.update({
-      where: { id },
+      where: {
+        id,
+      },
       data: {
-        discountType: finalDiscountType,
-        discountValue: finalDiscountValue,
-        discountAmount,
-        invoiceId: finalInvoiceId,
+        discountType,
+        discountValue:
+          discountValue !== undefined
+            ? Number(discountValue)
+            : undefined,
+
+        minAmount:
+          minAmount !== undefined
+            ? minAmount === null
+              ? null
+              : Number(minAmount)
+            : undefined,
+
+        maxDiscountAmount:
+          maxDiscountAmount !== undefined
+            ? maxDiscountAmount === null
+              ? null
+              : Number(maxDiscountAmount)
+            : undefined,
+
+        discountAmount:
+          discountAmount !== undefined
+            ? discountAmount === null
+              ? null
+              : Number(discountAmount)
+            : undefined,
+
+        invoiceId:
+          invoiceId !== undefined
+            ? invoiceId || null
+            : undefined,
+      },
+      include: {
+        invoice: true,
       },
     });
 
     return res.status(200).json({
       success: true,
       message: "Discount updated successfully",
-      discount: updatedDiscount,
+      data: updatedDiscount,
     });
   } catch (error) {
     return res.status(500).json({
@@ -184,13 +302,16 @@ export const updateDiscount = async (req, res) => {
   }
 };
 
-// DELETE DISCOUNT
+// ================= DELETE DISCOUNT =================
+
 export const deleteDiscount = async (req, res) => {
   try {
     const { id } = req.params;
 
     const discount = await prisma.discount.findUnique({
-      where: { id },
+      where: {
+        id,
+      },
     });
 
     if (!discount) {
@@ -201,7 +322,9 @@ export const deleteDiscount = async (req, res) => {
     }
 
     await prisma.discount.delete({
-      where: { id },
+      where: {
+        id,
+      },
     });
 
     return res.status(200).json({
