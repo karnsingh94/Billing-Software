@@ -70,165 +70,134 @@ export const createInvoiceService = async (
   loggedInUserId
 ) => {
   const {
+    paymentId,
     customerName,
     currency = "INR",
-    items,
+    gst = 0,
     discount,
   } = input;
 
   return prisma.$transaction(async (tx) => {
-    // --------------------------------------------------
-    // Check logged-in user
-    // --------------------------------------------------
+    // ==========================================
+    // 1. CHECK USER
+    // ==========================================
 
     const user = await tx.user.findFirst({
       where: {
         id: loggedInUserId,
         deletedAt: null,
       },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-      },
     });
 
     if (!user) {
-      throw new Error("Logged-in user not found");
-    }
-
-    if (!Array.isArray(items) || items.length === 0) {
       throw new Error(
-        "At least one invoice item is required"
+        "Logged-in user not found"
       );
     }
 
-    // --------------------------------------------------
-    // Prevent same product multiple times
-    // --------------------------------------------------
+    // ==========================================
+    // 2. GET PAYMENT
+    // ==========================================
 
-    const productIds = items.map(
-      (item) => item.productId
-    );
+    const payment =
+      await tx.payment.findUnique({
+        where: {
+          id: paymentId,
+        },
 
-    const uniqueProductIds = new Set(productIds);
+        include: {
+          product: true,
+          invoice: true,
+        },
+      });
+
+    if (!payment) {
+      throw new Error(
+        "Payment not found"
+      );
+    }
+
+    // ==========================================
+    // 3. CHECK PAYMENT ALREADY HAS INVOICE
+    // ==========================================
+
+    if (payment.invoice) {
+      throw new Error(
+        "Invoice already exists for this payment"
+      );
+    }
+
+    // ==========================================
+    // 4. PRODUCT ID AUTOMATIC FROM PAYMENT
+    // ==========================================
+
+    const productId =
+      payment.productId;
+
+    const product =
+      payment.product;
+
+    if (!product) {
+      throw new Error(
+        "Product not found for this payment"
+      );
+    }
+
+    if (product.deletedAt) {
+      throw new Error(
+        "Product has been deleted"
+      );
+    }
+
+    // ==========================================
+    // 5. GET QUANTITY AUTOMATIC FROM PAYMENT
+    // ==========================================
+
+    const quantity =
+      payment.quantity;
+
+    // ==========================================
+    // 6. GET PRICE AUTOMATIC FROM PAYMENT
+    // ==========================================
+
+    const price =
+      new Prisma.Decimal(
+        payment.price
+      );
+
+    // ==========================================
+    // 7. GST CALCULATION
+    // ==========================================
+
+    const gstDecimal =
+      new Prisma.Decimal(gst || 0);
 
     if (
-      uniqueProductIds.size !== productIds.length
+      gstDecimal.lessThan(0) ||
+      gstDecimal.greaterThan(100)
     ) {
       throw new Error(
-        "Same product cannot be added multiple times"
+        "GST must be between 0 and 100"
       );
     }
 
-    // --------------------------------------------------
-    // Fetch products
-    // --------------------------------------------------
+    const baseTotal = price.mul(
+      new Prisma.Decimal(quantity)
+    );
 
-    const products = await tx.product.findMany({
-      where: {
-        id: {
-          in: productIds,
-        },
-        deletedAt: null,
-      },
-    });
+    const gstAmount = baseTotal
+      .mul(gstDecimal)
+      .div(100);
 
-    if (products.length !== productIds.length) {
-      throw new Error(
-        "One or more products were not found"
-      );
-    }
+    const subTotal =
+      baseTotal.plus(gstAmount);
 
-    // --------------------------------------------------
-    // Calculate invoice items
-    // --------------------------------------------------
+    // ==========================================
+    // 8. DISCOUNT CALCULATION
+    // ==========================================
 
-    const calculatedItems = [];
-    let subTotal = new Prisma.Decimal(0);
-
-    for (const item of items) {
-      const product = products.find(
-        (productItem) =>
-          productItem.id === item.productId
-      );
-
-      if (!product) {
-        throw new Error(
-          `Product not found: ${item.productId}`
-        );
-      }
-
-      if (
-        !Number.isInteger(item.quantity) ||
-        item.quantity <= 0
-      ) {
-        throw new Error(
-          `Invalid quantity for ${product.productName}`
-        );
-      }
-
-      if (product.stock < item.quantity) {
-        throw new Error(
-          `Insufficient stock for ${product.productName}. Available stock is ${product.stock}`
-        );
-      }
-
-      const price = new Prisma.Decimal(
-        item.price !== undefined
-          ? item.price
-          : product.sellingPrice
-      );
-
-      if (price.lessThanOrEqualTo(0)) {
-        throw new Error(
-          `Price must be greater than zero for ${product.productName}`
-        );
-      }
-
-      const gst = new Prisma.Decimal(
-        item.gst || 0
-      );
-
-      if (
-        gst.lessThan(0) ||
-        gst.greaterThan(100)
-      ) {
-        throw new Error(
-          `GST must be between 0 and 100 for ${product.productName}`
-        );
-      }
-
-      const quantity = new Prisma.Decimal(
-        item.quantity
-      );
-
-      const baseTotal = price.mul(quantity);
-
-      const gstAmount = baseTotal
-        .mul(gst)
-        .div(100);
-
-      const itemTotal =
-        baseTotal.plus(gstAmount);
-
-      subTotal = subTotal.plus(itemTotal);
-
-      calculatedItems.push({
-        productId: product.id,
-        productName: product.productName,
-        quantity: item.quantity,
-        price: price.toNumber(),
-        gst: gst.toNumber(),
-        total: itemTotal.toNumber(),
-      });
-    }
-
-    // --------------------------------------------------
-    // Calculate discount
-    // --------------------------------------------------
-
-    let discountAmount = new Prisma.Decimal(0);
+    let discountAmount =
+      new Prisma.Decimal(0);
 
     if (discount) {
       const discountValue =
@@ -236,16 +205,13 @@ export const createInvoiceService = async (
           discount.discountValue || 0
         );
 
-      if (discountValue.lessThan(0)) {
-        throw new Error(
-          "Discount value cannot be negative"
-        );
-      }
-
       if (
-        discount.discountType === "PERCENTAGE"
+        discount.discountType ===
+        "PERCENTAGE"
       ) {
-        if (discountValue.greaterThan(100)) {
+        if (
+          discountValue.greaterThan(100)
+        ) {
           throw new Error(
             "Percentage discount cannot exceed 100"
           );
@@ -254,152 +220,227 @@ export const createInvoiceService = async (
         discountAmount = subTotal
           .mul(discountValue)
           .div(100);
-      } else if (
-        discount.discountType === "FIXED"
-      ) {
-        discountAmount = discountValue;
       }
 
       if (
-        discountAmount.greaterThan(subTotal)
+        discount.discountType ===
+        "FIXED"
+      ) {
+        discountAmount =
+          discountValue;
+      }
+
+      if (
+        discountAmount.greaterThan(
+          subTotal
+        )
       ) {
         throw new Error(
-          "Discount amount cannot exceed subtotal"
+          "Discount cannot exceed subtotal"
         );
       }
     }
 
-    // --------------------------------------------------
-    // Invoice totals
-    // --------------------------------------------------
+    // ==========================================
+    // 9. FINAL TOTAL
+    // ==========================================
 
     const totalAmount =
       subTotal.minus(discountAmount);
 
-    const paidAmount = new Prisma.Decimal(0);
-    const dueAmount = totalAmount;
+    /*
+     * Payment already exists, so use
+     * payment.amount as paidAmount.
+     */
+    const paymentAmount =
+      new Prisma.Decimal(
+        payment.amount
+      );
+
+    const paidAmount =
+      paymentAmount.greaterThan(
+        totalAmount
+      )
+        ? totalAmount
+        : paymentAmount;
+
+    const dueAmount =
+      totalAmount.minus(paidAmount);
+
+    // ==========================================
+    // 10. INVOICE STATUS
+    // ==========================================
+
+    let status = "PENDING";
+
+    if (
+      paidAmount.greaterThanOrEqualTo(
+        totalAmount
+      )
+    ) {
+      status = "PAID";
+    } else if (
+      paidAmount.greaterThan(0)
+    ) {
+      status = "PARTIAL";
+    }
+
+    if (
+      payment.paymentStatus ===
+      "REFUNDED"
+    ) {
+      status = "REFUNDED";
+    }
+
+    // ==========================================
+    // 11. GENERATE INVOICE NUMBER
+    // ==========================================
 
     const invoiceNumber =
       await getUniqueInvoiceNumber(tx);
 
-    // --------------------------------------------------
-    // Create invoice
-    // --------------------------------------------------
+    // ==========================================
+    // 12. CREATE INVOICE
+    // ==========================================
 
-    const invoice = await tx.invoice.create({
-      data: {
-        invoiceNumber,
-
-        userId: loggedInUserId,
-
-        customerName,
-        currency,
-
-        subTotal,
-        discountAmount,
-        totalAmount,
-        paidAmount,
-        dueAmount,
-
-        status: "PENDING",
-
-        items: {
-          create: calculatedItems.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.price,
-            gst: item.gst,
-            total: item.total,
-          })),
-        },
-
-        ...(discount
-          ? {
-              discounts: {
-                create: {
-                  discountType:
-                    discount.discountType,
-
-                  discountValue:
-                    Number(
-                      discount.discountValue
-                    ),
-
-                  discountAmount:
-                    discountAmount.toNumber(),
-                },
-              },
-            }
-          : {}),
-      },
-
-      include: {
-        user: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-          },
-        },
-
-        items: {
-          include: {
-            product: true,
-          },
-        },
-
-        discounts: true,
-        payment: true,
-        returns: true,
-      },
-    });
-
-    // --------------------------------------------------
-    // Reduce product stock
-    // --------------------------------------------------
-
-    for (const item of calculatedItems) {
-      await tx.product.update({
-        where: {
-          id: item.productId,
-        },
+    const invoice =
+      await tx.invoice.create({
         data: {
-          stock: {
-            decrement: item.quantity,
-          },
-          updatedBy: loggedInUserId,
-        },
-      });
-    }
+          invoiceNumber,
 
-    // --------------------------------------------------
-    // Audit log
-    // --------------------------------------------------
+          paymentId:
+            payment.id,
 
-    await tx.audit.create({
-      data: {
-        action: "CREATE_INVOICE",
-        table: "Invoice",
+          userId:
+            loggedInUserId,
 
-        oldValue: Prisma.JsonNull,
-
-        newValue: makeJsonSafe({
-          invoiceId: invoice.id,
-          invoiceNumber:
-            invoice.invoiceNumber,
           customerName:
-            invoice.customerName,
-          items: calculatedItems,
+            customerName ||
+            payment.customerName,
+
+          currency:
+            currency ||
+            payment.currency,
+
           subTotal,
           discountAmount,
           totalAmount,
           paidAmount,
           dueAmount,
-          status: invoice.status,
-        }),
+          status,
 
-        createdBy: loggedInUserId,
-        userId: loggedInUserId,
+          // Product automatically from Payment
+          items: {
+            create: {
+              productId:
+                payment.productId,
+
+              quantity:
+                payment.quantity,
+
+              price:
+                price.toNumber(),
+
+              gst:
+                gstDecimal.toNumber(),
+
+              total:
+                subTotal.toNumber(),
+            },
+          },
+
+          ...(discount
+            ? {
+                discounts: {
+                  create: {
+                    discountType:
+                      discount.discountType,
+
+                    discountValue:
+                      Number(
+                        discount.discountValue
+                      ),
+
+                    discountAmount:
+                      discountAmount.toNumber(),
+                  },
+                },
+              }
+            : {}),
+        },
+
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+
+          items: {
+            include: {
+              product: true,
+            },
+          },
+
+          discounts: true,
+          payment: true,
+          returns: true,
+        },
+      });
+
+    // ==========================================
+    // 13. AUDIT LOG
+    // ==========================================
+
+    await tx.audit.create({
+      data: {
+        action:
+          "CREATE_INVOICE_FROM_PAYMENT",
+
+        table:
+          "Invoice",
+
+        oldValue:
+          Prisma.JsonNull,
+
+        newValue:
+          makeJsonSafe({
+            invoiceId:
+              invoice.id,
+
+            invoiceNumber:
+              invoice.invoiceNumber,
+
+            paymentId:
+              payment.id,
+
+            productId:
+              payment.productId,
+
+            customerName:
+              invoice.customerName,
+
+            quantity:
+              payment.quantity,
+
+            price:
+              payment.price,
+
+            subTotal,
+            discountAmount,
+            totalAmount,
+            paidAmount,
+            dueAmount,
+            status,
+          }),
+
+        createdBy:
+          loggedInUserId,
+
+        userId:
+          loggedInUserId,
       },
     });
 
