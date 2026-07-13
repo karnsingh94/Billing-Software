@@ -71,7 +71,7 @@ const signup = async (req, res) => {
         password: hashedPassword,
         phone: phone.trim(),
         location: location.trim(),
-          role: "SUPER_ADMIN",
+        role: "SUPER_ADMIN",
         createdById: null,
       },
     });
@@ -83,6 +83,79 @@ const signup = async (req, res) => {
       message: "Super admin created successfully",
       superAdmin: superAdminWithoutPassword,
     });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+    });
+  }
+};
+
+
+//====================================updatePassword=================================
+
+const updatePassword = async (req, res) => {
+  try {
+    const { oldPassword, newPassword, confirmPassword } = req.body;
+
+    // ================= Validation =================
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
+    }
+
+    // ================= Confirm Password =================
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password and confirm password do not match",
+      });
+    }
+
+    // ================= Get Logged-in User =================
+    const user = await prisma.user.findUnique({
+      where: {
+        id: req.user.id,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // ================= Check Old Password =================
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: "Old password is incorrect",
+      });
+    }
+
+    // ================= Hash New Password =================
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // ================= Update Password =================
+    await prisma.user.update({
+      where: {
+        id: req.user.id,
+      },
+      data: {
+        password: hashedPassword,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Password updated successfully",
+    });
+
   } catch (error) {
     return res.status(500).json({
       success: false,
@@ -222,7 +295,7 @@ const createAdmin = async (req, res) => {
   }
 };
 
-// ===============================Admin==============================
+// ==============================create User==============================
 
 const createUser = async (req, res) => {
   try {
@@ -337,4 +410,4 @@ const getMe = async (req, res) => {
   });
 };
 
-export { signup, login, createAdmin, createUser, logout, getMe };
+export { signup, updatePassword, login, createAdmin, createUser, logout, getMe };
