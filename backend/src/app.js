@@ -9,6 +9,7 @@ import invoiceRouter from "../src/routes/invoice.routes.js";
 import discountRoutes from "./routes/discount.routes.js";
 import invoiceItemRoutes from "./routes/invoiceItem.routes.js";
 import dateRangeReportRouter from "./routes/period-report.routes.js";
+import couponRoutes from "./routes/coupon.routes.js";
 
 
 
@@ -18,6 +19,13 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.use(
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+  })
+);
 
 
 
@@ -32,4 +40,13 @@ app.use(
   "/api/v1/reports",
   dateRangeReportRouter
 );
+app.use("/api/v1/coupons", couponRoutes);
+
 export default app;
+
+
+
+
+
+
+
