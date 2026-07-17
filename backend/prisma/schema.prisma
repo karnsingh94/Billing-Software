@@ -53,6 +53,30 @@ enum DiscountType {
 }
 
 // =========================
+// REPORT ENUMS
+// =========================
+
+enum ReportType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  ANNUAL
+}
+
+enum ReportFormat {
+  JSON
+  PDF
+  EXCEL
+  CSV
+}
+
+enum ReportStatus {
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+// =========================
 // USER
 // =========================
 
@@ -82,6 +106,9 @@ model User {
   payments Payment[]
   returns  Return[]
   audits   Audit[]
+
+  // Report history
+  reports Report[]
 }
 
 // =========================
@@ -93,6 +120,11 @@ model Product {
   productName  String
   productImage String?
   stock        Int     @default(0)
+  // Purchase price (Cost Price)
+  productPrice Float
+
+  // GST Percentage
+  gst          Float @default(18)
   sellingPrice Float
 
   createdAt DateTime  @default(now())
@@ -103,8 +135,9 @@ model Product {
   updatedBy String?
   deletedBy String?
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  paymentItems PaymentItem[]
 
   invoiceItems InvoiceItem[]
 
@@ -192,39 +225,48 @@ model Discount {
 // =========================
 
 model Payment {
-  id            String @id @default(uuid())
-  paymentNumber String @unique
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
-
-  customerName String
-  quantity     Int
-
-  price      Decimal @db.Decimal(15, 2)
-  totalPrice Decimal @db.Decimal(15, 2)
-
-  discountValue   Decimal @default(0) @db.Decimal(15, 2)
-  discountPercent Decimal @default(0) @db.Decimal(5, 2)
-  discountAmount  Decimal @default(0) @db.Decimal(15, 2)
-
-  finalPrice Decimal @db.Decimal(15, 2)
-
-  paymentMethod PaymentMethod
-  amount        Decimal       @db.Decimal(15, 2)
-  currency      String        @default("INR")
-  paymentStatus PaymentStatus @default(PENDING)
-
-  // Opposite relation of Invoice.payment
-  invoice Invoice?
+  id             String        @id @default(uuid())
+  paymentNumber  String        @unique
+  customerName   String?
+  paymentMethod  PaymentMethod
+  subtotal       Float
+  discountType   DiscountType?
+  discountValue  Float         @default(0)
+  discountAmount Float         @default(0)
+  finalAmount    Float
+  paidAmount     Float
+  dueAmount      Float
+  status         PaymentStatus
+  currency       String        @default("INR")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([userId])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  items     PaymentItem[]
+  product   Product?      @relation(fields: [productId], references: [id])
+  productId String?
+  invoice   Invoice?
+}
+
+model PaymentItem {
+  id String @id @default(uuid())
+
+  paymentId String
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  quantity   Int
+  price      Float
+  totalPrice Float
+
+  createdAt DateTime @default(now())
+
+  @@index([paymentId])
   @@index([productId])
 }
 
@@ -277,4 +319,76 @@ model Audit {
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
+}
+
+// =========================
+// REPORT
+// =========================
+
+model Report {
+  id String @id @default(uuid())
+
+  // Example: July 2026 Monthly Report
+  reportName String
+
+  reportType ReportType
+  format     ReportFormat @default(JSON)
+  status     ReportStatus @default(GENERATING)
+
+  // Report period
+  startDate DateTime
+  endDate   DateTime
+
+  // Optional values used for monthly/annual reports
+  day   Int?
+  week  Int?
+  month Int?
+  year  Int?
+
+  // Applied report filters
+  filters Json?
+
+  // Complete generated report response
+  reportData Json?
+
+  // Summary values
+  totalProducts Int @default(0)
+  totalUsers    Int @default(0)
+  totalInvoices Int @default(0)
+  totalPayments Int @default(0)
+  totalReturns  Int @default(0)
+
+  totalSales           Decimal @default(0) @db.Decimal(15, 2)
+  totalPaid            Decimal @default(0) @db.Decimal(15, 2)
+  totalDue             Decimal @default(0) @db.Decimal(15, 2)
+  totalDiscount        Decimal @default(0) @db.Decimal(15, 2)
+  totalPaymentReceived Decimal @default(0) @db.Decimal(15, 2)
+  totalRefund          Decimal @default(0) @db.Decimal(15, 2)
+  netRevenue           Decimal @default(0) @db.Decimal(15, 2)
+
+  // Generated file path for PDF, Excel or CSV
+  fileUrl String?
+
+  // Error details when generation fails
+  errorMessage String? @db.Text
+
+  totalRecords Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy String?
+  updatedBy String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([reportType])
+  @@index([status])
+  @@index([format])
+  @@index([userId])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([createdAt])
+  @@index([reportType, year, month])
 }

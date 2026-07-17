@@ -26,7 +26,7 @@ router.use(isAuth);
 
 // Create invoice
 router.post(
-  "/",
+  "/create-invoice",
   validate(createInvoiceSchema),
   createInvoiceController
 );

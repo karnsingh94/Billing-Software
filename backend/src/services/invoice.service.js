@@ -1,66 +1,73 @@
+import prisma from "../config/prisma.js";
 import { Prisma } from "@prisma/client";
-import prisma from "../db/db.js";
+
 
 // ======================================================
-// HELPERS
+// JSON SAFE
 // ======================================================
 
-const makeJsonSafe = (value) => {
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  return JSON.parse(
-    JSON.stringify(value, (_, item) => {
-      if (item instanceof Prisma.Decimal) {
-        return item.toNumber();
-      }
-
-      if (item instanceof Date) {
-        return item.toISOString();
-      }
-
-      return item;
-    })
+const makeJsonSafe = (value) =>
+  JSON.parse(
+    JSON.stringify(
+      value,
+      (_, v) =>
+        typeof v === "bigint"
+          ? Number(v)
+          : v
+    )
   );
-};
+
+// ======================================================
+// GENERATE INVOICE NUMBER
+// ======================================================
 
 const generateInvoiceNumber = () => {
-  const date = new Date();
+  const now = new Date();
 
-  const datePart = [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("");
+  const year = now.getFullYear();
 
-  const randomNumber = Math.floor(
+  const month = String(
+    now.getMonth() + 1
+  ).padStart(2, "0");
+
+  const day = String(
+    now.getDate()
+  ).padStart(2, "0");
+
+  const random = Math.floor(
     100000 + Math.random() * 900000
   );
 
-  return `INV-${datePart}-${randomNumber}`;
+  return `INV-${year}${month}${day}-${random}`;
 };
 
-const getUniqueInvoiceNumber = async (tx) => {
+// ======================================================
+// UNIQUE INVOICE NUMBER
+// ======================================================
+
+const getUniqueInvoiceNumber = async (
+  tx
+) => {
   let invoiceNumber;
-  let existingInvoice;
+  let exists;
 
   do {
-    invoiceNumber = generateInvoiceNumber();
+    invoiceNumber =
+      generateInvoiceNumber();
 
-    existingInvoice = await tx.invoice.findUnique({
-      where: {
-        invoiceNumber,
-      },
-      select: {
-        id: true,
-      },
-    });
-  } while (existingInvoice);
+    exists =
+      await tx.invoice.findUnique({
+        where: {
+          invoiceNumber,
+        },
+        select: {
+          id: true,
+        },
+      });
+  } while (exists);
 
   return invoiceNumber;
 };
-
 // ======================================================
 // CREATE INVOICE
 // ======================================================
@@ -73,19 +80,31 @@ export const createInvoiceService = async (
     paymentId,
     customerName,
     currency = "INR",
-    gst = 0,
-    discount,
   } = input;
+
+  if (!paymentId) {
+    throw new Error("Payment ID is required");
+  }
+
+  if (!loggedInUserId) {
+    throw new Error("Unauthorized user");
+  }
 
   return prisma.$transaction(async (tx) => {
     // ==========================================
-    // 1. CHECK USER
+    // 1. CHECK LOGGED-IN USER
     // ==========================================
 
     const user = await tx.user.findFirst({
       where: {
         id: loggedInUserId,
         deletedAt: null,
+      },
+
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
       },
     });
 
@@ -96,7 +115,7 @@ export const createInvoiceService = async (
     }
 
     // ==========================================
-    // 2. GET PAYMENT
+    // 2. GET PAYMENT WITH MULTIPLE ITEMS
     // ==========================================
 
     const payment =
@@ -106,7 +125,12 @@ export const createInvoiceService = async (
         },
 
         include: {
-          product: true,
+          items: {
+            include: {
+              product: true,
+            },
+          },
+
           invoice: true,
         },
       });
@@ -118,7 +142,7 @@ export const createInvoiceService = async (
     }
 
     // ==========================================
-    // 3. CHECK PAYMENT ALREADY HAS INVOICE
+    // 3. CHECK EXISTING INVOICE
     // ==========================================
 
     if (payment.invoice) {
@@ -128,179 +152,197 @@ export const createInvoiceService = async (
     }
 
     // ==========================================
-    // 4. PRODUCT ID AUTOMATIC FROM PAYMENT
+    // 4. CHECK PAYMENT ITEMS
     // ==========================================
-
-    const productId =
-      payment.productId;
-
-    const product =
-      payment.product;
-
-    if (!product) {
-      throw new Error(
-        "Product not found for this payment"
-      );
-    }
-
-    if (product.deletedAt) {
-      throw new Error(
-        "Product has been deleted"
-      );
-    }
-
-    // ==========================================
-    // 5. GET QUANTITY AUTOMATIC FROM PAYMENT
-    // ==========================================
-
-    const quantity =
-      payment.quantity;
-
-    // ==========================================
-    // 6. GET PRICE AUTOMATIC FROM PAYMENT
-    // ==========================================
-
-    const price =
-      new Prisma.Decimal(
-        payment.price
-      );
-
-    // ==========================================
-    // 7. GST CALCULATION
-    // ==========================================
-
-    const gstDecimal =
-      new Prisma.Decimal(gst || 0);
 
     if (
-      gstDecimal.lessThan(0) ||
-      gstDecimal.greaterThan(100)
+      !Array.isArray(payment.items) ||
+      payment.items.length === 0
     ) {
       throw new Error(
-        "GST must be between 0 and 100"
+        "No products found for this payment"
       );
     }
 
-    const baseTotal = price.mul(
-      new Prisma.Decimal(quantity)
-    );
-
-    const gstAmount = baseTotal
-      .mul(gstDecimal)
-      .div(100);
-
-    const subTotal =
-      baseTotal.plus(gstAmount);
-
-    // ==========================================
-    // 8. DISCOUNT CALCULATION
-    // ==========================================
-
-    let discountAmount =
-      new Prisma.Decimal(0);
-
-    if (discount) {
-      const discountValue =
-        new Prisma.Decimal(
-          discount.discountValue || 0
+    for (const item of payment.items) {
+      if (!item.product) {
+        throw new Error(
+          `Product not found for payment item ${item.id}`
         );
+      }
 
-      if (
-        discount.discountType ===
-        "PERCENTAGE"
-      ) {
-        if (
-          discountValue.greaterThan(100)
-        ) {
-          throw new Error(
-            "Percentage discount cannot exceed 100"
-          );
-        }
-
-        discountAmount = subTotal
-          .mul(discountValue)
-          .div(100);
+      if (item.product.deletedAt) {
+        throw new Error(
+          `${item.product.productName} has been deleted`
+        );
       }
 
       if (
-        discount.discountType ===
-        "FIXED"
-      ) {
-        discountAmount =
-          discountValue;
-      }
-
-      if (
-        discountAmount.greaterThan(
-          subTotal
-        )
+        !Number.isInteger(item.quantity) ||
+        item.quantity <= 0
       ) {
         throw new Error(
-          "Discount cannot exceed subtotal"
+          `Invalid quantity for ${item.product.productName}`
+        );
+      }
+
+      const itemPrice = Number(
+        item.price
+      );
+
+      const itemTotal = Number(
+        item.totalPrice
+      );
+
+      if (
+        !Number.isFinite(itemPrice) ||
+        itemPrice <= 0
+      ) {
+        throw new Error(
+          `Invalid price for ${item.product.productName}`
+        );
+      }
+
+      if (
+        !Number.isFinite(itemTotal) ||
+        itemTotal < 0
+      ) {
+        throw new Error(
+          `Invalid total price for ${item.product.productName}`
         );
       }
     }
 
     // ==========================================
-    // 9. FINAL TOTAL
+    // 5. COPY PAYMENT TOTALS
     // ==========================================
 
-    const totalAmount =
-      subTotal.minus(discountAmount);
-
-    /*
-     * Payment already exists, so use
-     * payment.amount as paidAmount.
-     */
-    const paymentAmount =
+    const subTotal =
       new Prisma.Decimal(
-        payment.amount
+        payment.subtotal
+      );
+
+    const discountAmount =
+      new Prisma.Decimal(
+        payment.discountAmount || 0
+      );
+
+    const totalAmount =
+      new Prisma.Decimal(
+        payment.finalAmount
       );
 
     const paidAmount =
-      paymentAmount.greaterThan(
-        totalAmount
-      )
-        ? totalAmount
-        : paymentAmount;
+      new Prisma.Decimal(
+        payment.paidAmount
+      );
 
     const dueAmount =
-      totalAmount.minus(paidAmount);
+      new Prisma.Decimal(
+        payment.dueAmount
+      );
 
     // ==========================================
-    // 10. INVOICE STATUS
+    // 6. VALIDATE PAYMENT TOTALS
+    // ==========================================
+
+    if (subTotal.lessThan(0)) {
+      throw new Error(
+        "Payment subtotal cannot be negative"
+      );
+    }
+
+    if (discountAmount.lessThan(0)) {
+      throw new Error(
+        "Payment discount cannot be negative"
+      );
+    }
+
+    if (totalAmount.lessThan(0)) {
+      throw new Error(
+        "Payment final amount cannot be negative"
+      );
+    }
+
+    if (paidAmount.lessThan(0)) {
+      throw new Error(
+        "Payment paid amount cannot be negative"
+      );
+    }
+
+    if (dueAmount.lessThan(0)) {
+      throw new Error(
+        "Payment due amount cannot be negative"
+      );
+    }
+
+    // ==========================================
+    // 7. INVOICE STATUS
     // ==========================================
 
     let status = "PENDING";
 
-    if (
-      paidAmount.greaterThanOrEqualTo(
-        totalAmount
-      )
-    ) {
+    if (payment.status === "PAID") {
       status = "PAID";
     } else if (
-      paidAmount.greaterThan(0)
+      payment.status === "PARTIAL"
     ) {
       status = "PARTIAL";
-    }
-
-    if (
-      payment.paymentStatus ===
-      "REFUNDED"
+    } else if (
+      payment.status === "REFUNDED"
     ) {
       status = "REFUNDED";
+    } else if (
+      payment.status === "PENDING"
+    ) {
+      status = "PENDING";
     }
 
     // ==========================================
-    // 11. GENERATE INVOICE NUMBER
+    // 8. GENERATE INVOICE NUMBER
     // ==========================================
 
     const invoiceNumber =
       await getUniqueInvoiceNumber(tx);
 
     // ==========================================
-    // 12. CREATE INVOICE
+    // 9. PREPARE INVOICE ITEMS
+    // ==========================================
+
+    const invoiceItems =
+      payment.items.map((item) => ({
+        productId:
+          item.productId,
+
+        quantity:
+          item.quantity,
+
+        /*
+         * PaymentItem.price contains
+         * product selling price.
+         */
+        price:
+          Number(item.price),
+
+        /*
+         * GST is copied from the Product table.
+         * GST is not calculated again.
+         */
+        gst:
+          Number(
+            item.product.gst || 0
+          ),
+
+        /*
+         * PaymentItem.totalPrice already contains:
+         * price × quantity
+         */
+        total:
+          Number(item.totalPrice),
+      }));
+
+    // ==========================================
+    // 10. CREATE INVOICE
     // ==========================================
 
     const invoice =
@@ -316,11 +358,13 @@ export const createInvoiceService = async (
 
           customerName:
             customerName ||
-            payment.customerName,
+            payment.customerName ||
+            "Customer",
 
           currency:
             currency ||
-            payment.currency,
+            payment.currency ||
+            "INR",
 
           subTotal,
           discountAmount,
@@ -329,44 +373,10 @@ export const createInvoiceService = async (
           dueAmount,
           status,
 
-          // Product automatically from Payment
           items: {
-            create: {
-              productId:
-                payment.productId,
-
-              quantity:
-                payment.quantity,
-
-              price:
-                price.toNumber(),
-
-              gst:
-                gstDecimal.toNumber(),
-
-              total:
-                subTotal.toNumber(),
-            },
+            create:
+              invoiceItems,
           },
-
-          ...(discount
-            ? {
-                discounts: {
-                  create: {
-                    discountType:
-                      discount.discountType,
-
-                    discountValue:
-                      Number(
-                        discount.discountValue
-                      ),
-
-                    discountAmount:
-                      discountAmount.toNumber(),
-                  },
-                },
-              }
-            : {}),
         },
 
         include: {
@@ -391,7 +401,7 @@ export const createInvoiceService = async (
       });
 
     // ==========================================
-    // 13. AUDIT LOG
+    // 11. CREATE AUDIT LOG
     // ==========================================
 
     await tx.audit.create({
@@ -416,17 +426,38 @@ export const createInvoiceService = async (
             paymentId:
               payment.id,
 
-            productId:
-              payment.productId,
-
             customerName:
               invoice.customerName,
 
-            quantity:
-              payment.quantity,
+            currency:
+              invoice.currency,
 
-            price:
-              payment.price,
+            products:
+              payment.items.map(
+                (item) => ({
+                  paymentItemId:
+                    item.id,
+
+                  productId:
+                    item.productId,
+
+                  productName:
+                    item.product
+                      .productName,
+
+                  quantity:
+                    item.quantity,
+
+                  price:
+                    item.price,
+
+                  gst:
+                    item.product.gst,
+
+                  totalPrice:
+                    item.totalPrice,
+                })
+              ),
 
             subTotal,
             discountAmount,
@@ -447,7 +478,6 @@ export const createInvoiceService = async (
     return invoice;
   });
 };
-
 // ======================================================
 // GET ALL INVOICES
 // ======================================================
@@ -482,13 +512,22 @@ export const getAllInvoicesService = async ({
     );
   }
 
-  const skip = (currentPage - 1) * pageLimit;
+  const skip =
+    (currentPage - 1) * pageLimit;
 
   const where = {};
+
+  // ==========================================
+  // STATUS FILTER
+  // ==========================================
 
   if (status) {
     where.status = status;
   }
+
+  // ==========================================
+  // SEARCH FILTER
+  // ==========================================
 
   if (search) {
     where.OR = [
@@ -497,11 +536,13 @@ export const getAllInvoicesService = async ({
           contains: search,
         },
       },
+
       {
         customerName: {
           contains: search,
         },
       },
+
       {
         user: {
           fullName: {
@@ -509,8 +550,24 @@ export const getAllInvoicesService = async ({
           },
         },
       },
+
+      {
+        items: {
+          some: {
+            product: {
+              productName: {
+                contains: search,
+              },
+            },
+          },
+        },
+      },
     ];
   }
+
+  // ==========================================
+  // DATE FILTER
+  // ==========================================
 
   if (startDate || endDate) {
     where.createdAt = {};
@@ -549,7 +606,9 @@ export const getAllInvoicesService = async ({
           parsedEndDate.getTime()
         )
       ) {
-        throw new Error("Invalid endDate");
+        throw new Error(
+          "Invalid endDate"
+        );
       }
 
       parsedEndDate.setHours(
@@ -563,6 +622,10 @@ export const getAllInvoicesService = async ({
         parsedEndDate;
     }
   }
+
+  // ==========================================
+  // GET INVOICES, COUNT, AND TOTALS
+  // ==========================================
 
   const [
     invoices,
@@ -588,8 +651,10 @@ export const getAllInvoicesService = async ({
                 id: true,
                 productName: true,
                 productImage: true,
-                stock: true,
+                productPrice: true,
+                gst: true,
                 sellingPrice: true,
+                stock: true,
               },
             },
           },
@@ -601,9 +666,16 @@ export const getAllInvoicesService = async ({
           select: {
             id: true,
             paymentNumber: true,
-            amount: true,
+            customerName: true,
             paymentMethod: true,
-            paymentStatus: true,
+            currency: true,
+            subtotal: true,
+            discountAmount: true,
+            finalAmount: true,
+            paidAmount: true,
+            dueAmount: true,
+            status: true,
+            createdAt: true,
           },
         },
 
@@ -624,6 +696,7 @@ export const getAllInvoicesService = async ({
 
     prisma.invoice.aggregate({
       where,
+
       _sum: {
         subTotal: true,
         discountAmount: true,
@@ -633,6 +706,10 @@ export const getAllInvoicesService = async ({
       },
     }),
   ]);
+
+  const totalPages = Math.ceil(
+    totalRecords / pageLimit
+  );
 
   return {
     invoices,
@@ -663,9 +740,13 @@ export const getAllInvoicesService = async ({
       currentPage,
       limit: pageLimit,
       totalRecords,
-      totalPages: Math.ceil(
-        totalRecords / pageLimit
-      ),
+      totalPages,
+
+      hasNextPage:
+        currentPage < totalPages,
+
+      hasPreviousPage:
+        currentPage > 1,
     },
   };
 };
@@ -702,18 +783,40 @@ export const getInvoiceByIdService = async (
 
         items: {
           include: {
-            product: true,
+            product: {
+              select: {
+                id: true,
+                productName: true,
+                productImage: true,
+                productPrice: true,
+                gst: true,
+                sellingPrice: true,
+                stock: true,
+              },
+            },
           },
         },
 
         discounts: true,
-        payment: true,
+
+        payment: {
+          include: {
+            items: {
+              include: {
+                product: true,
+              },
+            },
+          },
+        },
+
         returns: true,
       },
     });
 
   if (!invoice) {
-    throw new Error("Invoice not found");
+    throw new Error(
+      "Invoice not found"
+    );
   }
 
   return invoice;
@@ -751,23 +854,44 @@ export const getInvoiceByNumberService = async (
 
         items: {
           include: {
-            product: true,
+            product: {
+              select: {
+                id: true,
+                productName: true,
+                productImage: true,
+                productPrice: true,
+                gst: true,
+                sellingPrice: true,
+                stock: true,
+              },
+            },
           },
         },
 
         discounts: true,
-        payment: true,
+
+        payment: {
+          include: {
+            items: {
+              include: {
+                product: true,
+              },
+            },
+          },
+        },
+
         returns: true,
       },
     });
 
   if (!invoice) {
-    throw new Error("Invoice not found");
+    throw new Error(
+      "Invoice not found"
+    );
   }
 
   return invoice;
 };
-
 // ======================================================
 // UPDATE INVOICE BASIC DETAILS
 // ======================================================
@@ -777,115 +901,126 @@ export const updateInvoiceService = async (
   input,
   loggedInUserId
 ) => {
-  const existingInvoice =
-    await prisma.invoice.findUnique({
-      where: {
-        id: invoiceId,
-      },
-    });
-
-  if (!existingInvoice) {
-    throw new Error("Invoice not found");
+  if (!invoiceId) {
+    throw new Error("Invoice ID is required");
   }
 
-  if (
-    existingInvoice.status ===
-    "CANCELLED"
-  ) {
-    throw new Error(
-      "Cancelled invoice cannot be updated"
-    );
+  if (!loggedInUserId) {
+    throw new Error("Unauthorized user");
   }
 
-  if (
-    existingInvoice.status ===
-    "REFUNDED"
-  ) {
-    throw new Error(
-      "Refunded invoice cannot be updated"
-    );
-  }
+  return prisma.$transaction(async (tx) => {
+    const existingInvoice =
+      await tx.invoice.findUnique({
+        where: {
+          id: invoiceId,
+        },
+      });
 
-  const updatedInvoice =
-    await prisma.$transaction(
-      async (tx) => {
-        const invoice =
-          await tx.invoice.update({
-            where: {
-              id: invoiceId,
+    if (!existingInvoice) {
+      throw new Error("Invoice not found");
+    }
+
+    if (existingInvoice.status === "CANCELLED") {
+      throw new Error(
+        "Cancelled invoice cannot be updated"
+      );
+    }
+
+    if (existingInvoice.status === "REFUNDED") {
+      throw new Error(
+        "Refunded invoice cannot be updated"
+      );
+    }
+
+    const updateData = {};
+
+    if (input.customerName !== undefined) {
+      updateData.customerName =
+        input.customerName;
+    }
+
+    if (input.currency !== undefined) {
+      updateData.currency =
+        input.currency;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      throw new Error(
+        "At least one field is required for update"
+      );
+    }
+
+    const updatedInvoice =
+      await tx.invoice.update({
+        where: {
+          id: invoiceId,
+        },
+
+        data: updateData,
+
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
             },
+          },
 
-            data: {
-              ...(input.customerName !==
-              undefined
-                ? {
-                    customerName:
-                      input.customerName,
-                  }
-                : {}),
-
-              ...(input.currency !==
-              undefined
-                ? {
-                    currency:
-                      input.currency,
-                  }
-                : {}),
-            },
-
+          items: {
             include: {
-              user: {
-                select: {
-                  id: true,
-                  fullName: true,
-                  email: true,
-                },
-              },
+              product: true,
+            },
+          },
 
+          discounts: true,
+
+          payment: {
+            include: {
               items: {
                 include: {
                   product: true,
                 },
               },
-
-              discounts: true,
-              payment: true,
-              returns: true,
             },
-          });
-
-        await tx.audit.create({
-          data: {
-            action: "UPDATE_INVOICE",
-            table: "Invoice",
-
-            oldValue: makeJsonSafe({
-              customerName:
-                existingInvoice.customerName,
-              currency:
-                existingInvoice.currency,
-            }),
-
-            newValue: makeJsonSafe({
-              customerName:
-                invoice.customerName,
-              currency:
-                invoice.currency,
-            }),
-
-            createdBy:
-              loggedInUserId,
-
-            userId:
-              loggedInUserId,
           },
-        });
 
-        return invoice;
-      }
-    );
+          returns: true,
+        },
+      });
 
-  return updatedInvoice;
+    await tx.audit.create({
+      data: {
+        action: "UPDATE_INVOICE",
+        table: "Invoice",
+
+        oldValue: makeJsonSafe({
+          customerName:
+            existingInvoice.customerName,
+
+          currency:
+            existingInvoice.currency,
+        }),
+
+        newValue: makeJsonSafe({
+          customerName:
+            updatedInvoice.customerName,
+
+          currency:
+            updatedInvoice.currency,
+        }),
+
+        createdBy:
+          loggedInUserId,
+
+        userId:
+          loggedInUserId,
+      },
+    });
+
+    return updatedInvoice;
+  });
 };
 
 // ======================================================
@@ -899,6 +1034,14 @@ export const cancelInvoiceService = async (
 ) => {
   const { remarks } = input;
 
+  if (!invoiceId) {
+    throw new Error("Invoice ID is required");
+  }
+
+  if (!loggedInUserId) {
+    throw new Error("Unauthorized user");
+  }
+
   return prisma.$transaction(async (tx) => {
     const invoice =
       await tx.invoice.findUnique({
@@ -907,22 +1050,29 @@ export const cancelInvoiceService = async (
         },
 
         include: {
-          items: true,
+          items: {
+            include: {
+              product: true,
+            },
+          },
+
           payment: true,
         },
       });
 
     if (!invoice) {
+      throw new Error("Invoice not found");
+    }
+
+    if (invoice.status === "CANCELLED") {
       throw new Error(
-        "Invoice not found"
+        "Invoice is already cancelled"
       );
     }
 
-    if (
-      invoice.status === "CANCELLED"
-    ) {
+    if (invoice.status === "REFUNDED") {
       throw new Error(
-        "Invoice is already cancelled"
+        "Refunded invoice cannot be cancelled"
       );
     }
 
@@ -932,37 +1082,18 @@ export const cancelInvoiceService = async (
       );
     }
 
-    if (
-      invoice.status === "REFUNDED"
-    ) {
-      throw new Error(
-        "Refunded invoice cannot be cancelled"
-      );
-    }
-
     if (invoice.payment) {
       throw new Error(
-        "Invoice with payment cannot be cancelled"
+        "Invoice linked with payment cannot be cancelled"
       );
     }
 
-    // Restore stock
-    for (const item of invoice.items) {
-      await tx.product.update({
-        where: {
-          id: item.productId,
-        },
-
-        data: {
-          stock: {
-            increment: item.quantity,
-          },
-
-          updatedBy:
-            loggedInUserId,
-        },
-      });
-    }
+    /*
+     * Restore stock only when this invoice reduced stock.
+     * In your current flow, stock is reduced while creating
+     * the payment, so do not restore stock here for invoices
+     * created from a payment.
+     */
 
     const cancelledInvoice =
       await tx.invoice.update({
@@ -990,7 +1121,17 @@ export const cancelInvoiceService = async (
           },
 
           discounts: true,
-          payment: true,
+
+          payment: {
+            include: {
+              items: {
+                include: {
+                  product: true,
+                },
+              },
+            },
+          },
+
           returns: true,
         },
       });
@@ -1009,8 +1150,11 @@ export const cancelInvoiceService = async (
           remarks: remarks || null,
         }),
 
-        createdBy: loggedInUserId,
-        userId: loggedInUserId,
+        createdBy:
+          loggedInUserId,
+
+        userId:
+          loggedInUserId,
       },
     });
 
@@ -1073,10 +1217,11 @@ export const getInvoiceStatsService =
         },
 
         _sum: {
+          subTotal: true,
+          discountAmount: true,
           totalAmount: true,
           paidAmount: true,
           dueAmount: true,
-          discountAmount: true,
         },
       }),
     ]);
@@ -1089,6 +1234,14 @@ export const getInvoiceStatsService =
       cancelledInvoices,
       refundedInvoices,
 
+      subTotal:
+        totals._sum.subTotal ??
+        new Prisma.Decimal(0),
+
+      discountAmount:
+        totals._sum.discountAmount ??
+        new Prisma.Decimal(0),
+
       totalAmount:
         totals._sum.totalAmount ??
         new Prisma.Decimal(0),
@@ -1099,10 +1252,6 @@ export const getInvoiceStatsService =
 
       dueAmount:
         totals._sum.dueAmount ??
-        new Prisma.Decimal(0),
-
-      discountAmount:
-        totals._sum.discountAmount ??
         new Prisma.Decimal(0),
     };
   };

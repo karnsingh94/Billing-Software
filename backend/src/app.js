@@ -8,6 +8,7 @@ import paymentRouter from "./routes/payment.routes.js";
 import invoiceRouter from "../src/routes/invoice.routes.js";
 import discountRoutes from "./routes/discount.routes.js";
 import invoiceItemRoutes from "./routes/invoiceItem.routes.js";
+import dateRangeReportRouter from "./routes/period-report.routes.js";
 
 
 
@@ -26,7 +27,9 @@ app.use("/api/v1/products", productRouter);
 app.use("/api/v1/payments", paymentRouter);
 app.use("/api/v1/invoices", invoiceRouter);
 app.use("/api/v1/discount", discountRoutes)
-app.use("/api/v1/invoice-items", invoiceItemRoutes);
-
-
+app.use("/api/v1/invoice-items", invoiceItemRoutes);    
+app.use(
+  "/api/v1/reports",
+  dateRangeReportRouter
+);
 export default app;

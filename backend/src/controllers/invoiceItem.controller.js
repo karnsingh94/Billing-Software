@@ -1,303 +1,286 @@
-import  prisma  from "../db/db.js";
+import {
+  createInvoiceItemService,
+  getAllInvoiceItemsService,
+  getInvoiceItemByIdService,
+  getInvoiceItemsByInvoiceIdService,
+  updateInvoiceItemService,
+  deleteInvoiceItemService,
+} from "../services/invoiceItem.service.js";
 
-// helper function -> total calculate
-const calculateItemTotal = (quantity, price, gst = 0) => {
-  const baseAmount = Number(quantity) * Number(price);
-  const gstAmount = (baseAmount * Number(gst)) / 100;
-  return baseAmount + gstAmount;
+// ======================================================
+// ERROR HELPERS
+// ======================================================
+
+const getErrorStatusCode = (message = "") => {
+  const text =
+    String(message).toLowerCase();
+
+  if (
+    text.includes("unauthorized") ||
+    text.includes("logged-in user")
+  ) {
+    return 401;
+  }
+
+  if (
+    text.includes("forbidden") ||
+    text.includes("only admin")
+  ) {
+    return 403;
+  }
+
+  if (text.includes("not found")) {
+    return 404;
+  }
+
+  if (
+    text.includes("required") ||
+    text.includes("invalid") ||
+    text.includes("cannot") ||
+    text.includes("must")
+  ) {
+    return 400;
+  }
+
+  return 500;
 };
 
+const sendErrorResponse = (
+  res,
+  error,
+  fallbackMessage
+) => {
+  console.error(
+    "INVOICE ITEM ERROR:",
+    error
+  );
 
+  const message =
+    error instanceof Error
+      ? error.message
+      : fallbackMessage;
 
-// ================= CREATE INVOICE ITEM =================
-export const createInvoiceItem = async (req, res) => {
+  return res
+    .status(getErrorStatusCode(message))
+    .json({
+      success: false,
+      message:
+        message || fallbackMessage,
+    });
+};
+
+// ======================================================
+// CREATE INVOICE ITEM
+// ======================================================
+
+export const createInvoiceItem = async (
+  req,
+  res
+) => {
   try {
-    const { quantity, price, gst, invoiceId, productId } = req.body;
+    const userId = req.user?.id;
 
-    if (!quantity || !price || !invoiceId || !productId) {
-      return res.status(400).json({
+    if (!userId) {
+      return res.status(401).json({
         success: false,
-        message: "quantity, price, invoiceId and productId are required",
+        message: "Unauthorized user",
       });
     }
 
-    // invoice exists or not
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: invoiceId },
-    });
-
-    if (!invoice) {
-      return res.status(404).json({
-        success: false,
-        message: "Invoice not found",
-      });
-    }
-
-    // product exists or not
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-    });
-
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
-    }
-
-    const finalGst = gst ?? 0;
-    const total = calculateItemTotal(quantity, price, finalGst);
-
-    const invoiceItem = await prisma.invoiceItem.create({
-      data: {
-        quantity: Number(quantity),
-        price: Number(price),
-        gst: Number(finalGst),
-        total,
-        invoiceId,
-        productId,
-      },
-      include: {
-        invoice: true,
-        product: true,
-      },
-    });
+    const invoiceItem =
+      await createInvoiceItemService(
+        req.body,
+        userId
+      );
 
     return res.status(201).json({
       success: true,
-      message: "Invoice item created successfully",
+      message:
+        "Invoice item created successfully",
       invoiceItem,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to create invoice item"
+    );
   }
 };
 
+// ======================================================
+// GET ALL INVOICE ITEMS
+// ======================================================
 
-
-// ================= GET ALL INVOICE ITEMS =================
-export const getAllInvoiceItems = async (req, res) => {
+export const getAllInvoiceItems = async (
+  req,
+  res
+) => {
   try {
-    const invoiceItems = await prisma.invoiceItem.findMany({
-      include: {
-        invoice: true,
-        product: true,
-      },
-      orderBy: {
-        id: "desc",
-      },
-    });
+    const result =
+      await getAllInvoiceItemsService(
+        req.query
+      );
 
     return res.status(200).json({
       success: true,
-      invoiceItems,
+      message:
+        "Invoice items fetched successfully",
+      invoiceItems:
+        result.invoiceItems,
+      summary: result.summary,
+      pagination:
+        result.pagination,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to fetch invoice items"
+    );
   }
 };
 
+// ======================================================
+// GET SINGLE INVOICE ITEM
+// ======================================================
 
-
-// ================= GET SINGLE INVOICE ITEM =================
-export const getInvoiceItemById = async (req, res) => {
+export const getInvoiceItemById = async (
+  req,
+  res
+) => {
   try {
     const { id } = req.params;
 
-    const invoiceItem = await prisma.invoiceItem.findUnique({
-      where: { id },
-      include: {
-        invoice: true,
-        product: true,
-      },
-    });
-
-    if (!invoiceItem) {
-      return res.status(404).json({
-        success: false,
-        message: "Invoice item not found",
-      });
-    }
+    const invoiceItem =
+      await getInvoiceItemByIdService(
+        id
+      );
 
     return res.status(200).json({
       success: true,
+      message:
+        "Invoice item fetched successfully",
       invoiceItem,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to fetch invoice item"
+    );
   }
 };
 
+// ======================================================
+// GET ITEMS BY INVOICE ID
+// ======================================================
 
+export const getInvoiceItemsByInvoiceId =
+  async (req, res) => {
+    try {
+      const { invoiceId } = req.params;
 
-// ================= GET ITEMS BY INVOICE ID =================
-export const getInvoiceItemsByInvoiceId = async (req, res) => {
-  try {
-    const { invoiceId } = req.params;
+      const result =
+        await getInvoiceItemsByInvoiceIdService(
+          invoiceId
+        );
 
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: invoiceId },
-    });
-
-    if (!invoice) {
-      return res.status(404).json({
-        success: false,
-        message: "Invoice not found",
+      return res.status(200).json({
+        success: true,
+        message:
+          "Invoice items fetched successfully",
+        invoice: result.invoice,
+        invoiceItems:
+          result.invoiceItems,
+        summary: result.summary,
       });
+    } catch (error) {
+      return sendErrorResponse(
+        res,
+        error,
+        "Failed to fetch invoice items"
+      );
     }
+  };
 
-    const invoiceItems = await prisma.invoiceItem.findMany({
-      where: { invoiceId },
-      include: {
-        product: true,
-      },
-      orderBy: {
-        id: "desc",
-      },
-    });
+// ======================================================
+// UPDATE INVOICE ITEM
+// ======================================================
 
-    return res.status(200).json({
-      success: true,
-      invoiceItems,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-
-
-// ================= UPDATE INVOICE ITEM =================
-export const updateInvoiceItem = async (req, res) => {
+export const updateInvoiceItem = async (
+  req,
+  res
+) => {
   try {
     const { id } = req.params;
-    const { quantity, price, gst, invoiceId, productId } = req.body;
+    const userId = req.user?.id;
 
-    const existingInvoiceItem = await prisma.invoiceItem.findUnique({
-      where: { id },
-    });
-
-    if (!existingInvoiceItem) {
-      return res.status(404).json({
+    if (!userId) {
+      return res.status(401).json({
         success: false,
-        message: "Invoice item not found",
+        message: "Unauthorized user",
       });
     }
 
-    // final invoiceId
-    const finalInvoiceId = invoiceId || existingInvoiceItem.invoiceId;
-
-    // final productId
-    const finalProductId = productId || existingInvoiceItem.productId;
-
-    // check invoice exists
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: finalInvoiceId },
-    });
-
-    if (!invoice) {
-      return res.status(404).json({
-        success: false,
-        message: "Invoice not found",
-      });
-    }
-
-    // check product exists
-    const product = await prisma.product.findUnique({
-      where: { id: finalProductId },
-    });
-
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
-    }
-
-    const finalQuantity =
-      quantity !== undefined ? Number(quantity) : existingInvoiceItem.quantity;
-
-    const finalPrice =
-      price !== undefined ? Number(price) : existingInvoiceItem.price;
-
-    const finalGst =
-      gst !== undefined ? Number(gst) : existingInvoiceItem.gst;
-
-    const total = calculateItemTotal(finalQuantity, finalPrice, finalGst);
-
-    const updatedInvoiceItem = await prisma.invoiceItem.update({
-      where: { id },
-      data: {
-        quantity: finalQuantity,
-        price: finalPrice,
-        gst: finalGst,
-        total,
-        invoiceId: finalInvoiceId,
-        productId: finalProductId,
-      },
-      include: {
-        invoice: true,
-        product: true,
-      },
-    });
+    const invoiceItem =
+      await updateInvoiceItemService(
+        id,
+        req.body,
+        userId
+      );
 
     return res.status(200).json({
       success: true,
-      message: "Invoice item updated successfully",
-      invoiceItem: updatedInvoiceItem,
+      message:
+        "Invoice item updated successfully",
+      invoiceItem,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to update invoice item"
+    );
   }
 };
 
+// ======================================================
+// DELETE INVOICE ITEM
+// ======================================================
 
-
-// ================= DELETE INVOICE ITEM =================
-
-
-export const deleteInvoiceItem = async (req, res) => {
+export const deleteInvoiceItem = async (
+  req,
+  res
+) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
 
-    const existingInvoiceItem = await prisma.invoiceItem.findUnique({
-      where: { id },
-    });
-
-    if (!existingInvoiceItem) {
-      return res.status(404).json({
+    if (!userId) {
+      return res.status(401).json({
         success: false,
-        message: "Invoice item not found",
+        message: "Unauthorized user",
       });
     }
 
-    await prisma.invoiceItem.delete({
-      where: { id },
-    });
+    const result =
+      await deleteInvoiceItemService(
+        id,
+        userId
+      );
 
     return res.status(200).json({
       success: true,
-      message: "Invoice item deleted successfully",
+      message:
+        "Invoice item deleted successfully",
+      data: result,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to delete invoice item"
+    );
   }
 };

@@ -1,22 +1,12 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../config/prisma.js";
 
-/*
-If your Prisma file is inside src/lib/prisma.js, use:
-
-import prisma from "../lib/prisma.js";
-
-If your Prisma file is inside src/common/lib/prisma.js, use:
-
-import prisma from "../common/lib/prisma.js";
-*/
-
 // ======================================================
 // HELPERS
 // ======================================================
 
 const makeJsonSafe = (value) => {
-  if (value === undefined || value === null) {
+  if (value === null || value === undefined) {
     return null;
   }
 
@@ -28,6 +18,10 @@ const makeJsonSafe = (value) => {
 
       if (item instanceof Date) {
         return item.toISOString();
+      }
+
+      if (typeof item === "bigint") {
+        return item.toString();
       }
 
       return item;
@@ -58,47 +52,62 @@ const getUniquePaymentNumber = async (tx) => {
   do {
     paymentNumber = generatePaymentNumber();
 
-    existingPayment = await tx.payment.findUnique({
-      where: {
-        paymentNumber,
-      },
-      select: {
-        id: true,
-      },
-    });
+    existingPayment =
+      await tx.payment.findUnique({
+        where: {
+          paymentNumber,
+        },
+        select: {
+          id: true,
+        },
+      });
   } while (existingPayment);
 
   return paymentNumber;
 };
 
-const calculatePaymentStatus = (paidAmount, finalPrice) => {
-  const paid = new Prisma.Decimal(paidAmount);
-  const total = new Prisma.Decimal(finalPrice);
+const calculateDiscount = ({
+  subtotal,
+  discountType,
+  discountValue,
+}) => {
+  const value = Number(discountValue || 0);
 
-  if (paid.lessThanOrEqualTo(0)) {
-    return "PENDING";
+  if (value < 0) {
+    throw new Error(
+      "Discount cannot be negative"
+    );
   }
 
-  if (paid.lessThan(total)) {
-    return "PARTIAL";
+  if (!discountType || value === 0) {
+    return 0;
   }
 
-  return "PAID";
-};
+  if (discountType === "PERCENTAGE") {
+    if (value > 100) {
+      throw new Error(
+        "Percentage discount cannot exceed 100"
+      );
+    }
 
-const calculateInvoiceStatus = (paidAmount, totalAmount) => {
-  const paid = new Prisma.Decimal(paidAmount);
-  const total = new Prisma.Decimal(totalAmount);
-
-  if (paid.lessThanOrEqualTo(0)) {
-    return "PENDING";
+    return Number(
+      ((subtotal * value) / 100).toFixed(2)
+    );
   }
 
-  if (paid.lessThan(total)) {
-    return "PARTIAL";
+  if (discountType === "FIXED") {
+    if (value > subtotal) {
+      throw new Error(
+        "Fixed discount cannot exceed subtotal"
+      );
+    }
+
+    return Number(value.toFixed(2));
   }
 
-  return "PAID";
+  throw new Error(
+    "Discount type must be PERCENTAGE or FIXED"
+  );
 };
 
 // ======================================================
@@ -110,22 +119,29 @@ export const createPaymentService = async (
   loggedInUserId
 ) => {
   const {
-    invoiceId,
-    productId,
     customerName,
-    quantity,
-    price: inputPrice,
-    discountValue = 0,
-    discountPercent = 0,
-    amount,
     paymentMethod,
+    discountType,
+    discountValue = 0,
     currency = "INR",
+    products,
   } = input;
 
+  if (!loggedInUserId) {
+    throw new Error("Unauthorized user");
+  }
+
+  if (
+    !Array.isArray(products) ||
+    products.length === 0
+  ) {
+    throw new Error(
+      "At least one product is required"
+    );
+  }
+
   return prisma.$transaction(async (tx) => {
-    // --------------------------------------------------
-    // Check logged-in user
-    // --------------------------------------------------
+    // Check user
 
     const user = await tx.user.findFirst({
       where: {
@@ -134,387 +150,235 @@ export const createPaymentService = async (
       },
       select: {
         id: true,
-        fullName: true,
-        email: true,
       },
     });
 
     if (!user) {
-      throw new Error("Logged-in user not found");
-    }
-
-    // --------------------------------------------------
-    // Validate quantity
-    // --------------------------------------------------
-
-    if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new Error(
-        "Quantity must be a positive integer"
+        "Logged-in user not found"
       );
     }
 
-    // --------------------------------------------------
-    // Check product
-    // --------------------------------------------------
+    // Validate duplicate product IDs
 
-    const product = await tx.product.findFirst({
-      where: {
-        id: productId,
-        deletedAt: null,
-      },
-    });
+    const productIds = products.map(
+      (item) => item.productId
+    );
 
-    if (!product) {
-      throw new Error("Product not found");
+    const uniqueProductIds = [
+      ...new Set(productIds),
+    ];
+
+    if (
+      uniqueProductIds.length !==
+      productIds.length
+    ) {
+      throw new Error(
+        "The same product cannot be added twice"
+      );
     }
 
-    // --------------------------------------------------
-    // Check invoice
-    // --------------------------------------------------
+    // Get products from database
 
-    let invoice = null;
-
-    if (invoiceId) {
-      invoice = await tx.invoice.findUnique({
+    const databaseProducts =
+      await tx.product.findMany({
         where: {
-          id: invoiceId,
+          id: {
+            in: uniqueProductIds,
+          },
+          deletedAt: null,
         },
-        include: {
-          payment: true,
-          items: true,
-          discounts: true,
+        select: {
+          id: true,
+          productName: true,
+          productImage: true,
+          productPrice: true,
+          gst: true,
+          sellingPrice: true,
+          stock: true,
         },
       });
 
-      if (!invoice) {
-        throw new Error("Invoice not found");
-      }
-
-      if (invoice.status === "CANCELLED") {
-        throw new Error(
-          "Payment cannot be added to a cancelled invoice"
-        );
-      }
-
-      if (invoice.status === "REFUNDED") {
-        throw new Error(
-          "Payment cannot be added to a refunded invoice"
-        );
-      }
-
-      if (invoice.status === "PAID") {
-        throw new Error("Invoice is already paid");
-      }
-
-      /*
-       * Current Prisma schema allows only one payment
-       * for one invoice.
-       */
-      if (invoice.paymentId || invoice.payment) {
-        throw new Error(
-          "This invoice already has a payment"
-        );
-      }
-
-      const invoiceItem = invoice.items.find(
-        (item) => item.productId === productId
-      );
-
-      if (!invoiceItem) {
-        throw new Error(
-          "Selected product does not exist in this invoice"
-        );
-      }
-    }
-
-    // --------------------------------------------------
-    // Direct payment stock validation
-    // --------------------------------------------------
-
-    if (!invoiceId && product.stock < quantity) {
-      throw new Error(
-        `Insufficient stock. Available stock is ${product.stock}`
-      );
-    }
-
-    // --------------------------------------------------
-    // Calculate price
-    // --------------------------------------------------
-
-    const price = new Prisma.Decimal(
-      inputPrice !== undefined
-        ? inputPrice
-        : product.sellingPrice
-    );
-
-    if (price.lessThanOrEqualTo(0)) {
-      throw new Error(
-        "Product price must be greater than zero"
-      );
-    }
-
-    const quantityDecimal = new Prisma.Decimal(quantity);
-    const productTotalPrice = price.mul(quantityDecimal);
-
-    const fixedDiscount = new Prisma.Decimal(
-      discountValue || 0
-    );
-
-    const percentageDiscount = new Prisma.Decimal(
-      discountPercent || 0
-    );
-
-    if (fixedDiscount.lessThan(0)) {
-      throw new Error(
-        "Discount value cannot be negative"
-      );
-    }
-
     if (
-      percentageDiscount.lessThan(0) ||
-      percentageDiscount.greaterThan(100)
+      databaseProducts.length !==
+      uniqueProductIds.length
     ) {
       throw new Error(
-        "Discount percentage must be between 0 and 100"
+        "One or more products were not found"
       );
     }
 
-    if (
-      fixedDiscount.greaterThan(0) &&
-      percentageDiscount.greaterThan(0)
-    ) {
-      throw new Error(
-        "Use either discount value or discount percentage"
+    let subtotal = 0;
+    const paymentItems = [];
+
+    for (const requestItem of products) {
+      const quantity = Number(
+        requestItem.quantity
       );
-    }
-
-    // --------------------------------------------------
-    // Calculate final price
-    // --------------------------------------------------
-
-    let totalPrice;
-    let calculatedDiscountAmount;
-    let finalPrice;
-
-    if (invoice) {
-      /*
-       * Invoice already contains its own discount and total.
-       * Do not apply payment discount again.
-       */
-      totalPrice = new Prisma.Decimal(
-        invoice.totalAmount
-      );
-
-      calculatedDiscountAmount = new Prisma.Decimal(
-        invoice.discountAmount
-      );
-
-      finalPrice = new Prisma.Decimal(
-        invoice.dueAmount
-      );
-    } else {
-      totalPrice = productTotalPrice;
-      calculatedDiscountAmount = new Prisma.Decimal(0);
-
-      if (percentageDiscount.greaterThan(0)) {
-        calculatedDiscountAmount = totalPrice
-          .mul(percentageDiscount)
-          .div(100);
-      } else if (fixedDiscount.greaterThan(0)) {
-        calculatedDiscountAmount = fixedDiscount;
-      }
 
       if (
-        calculatedDiscountAmount.greaterThan(totalPrice)
+        !Number.isInteger(quantity) ||
+        quantity <= 0
       ) {
         throw new Error(
-          "Discount amount cannot exceed total price"
+          "Quantity must be a positive integer"
         );
       }
 
-      finalPrice = totalPrice.minus(
-        calculatedDiscountAmount
+      const product =
+        databaseProducts.find(
+          (databaseProduct) =>
+            databaseProduct.id ===
+            requestItem.productId
+        );
+
+      if (!product) {
+        throw new Error(
+          `Product not found: ${requestItem.productId}`
+        );
+      }
+
+      if (product.stock < quantity) {
+        throw new Error(
+          `Insufficient stock for ${product.productName}. Available stock is ${product.stock}`
+        );
+      }
+
+      const price = Number(
+        product.sellingPrice
       );
+
+      if (
+        !Number.isFinite(price) ||
+        price <= 0
+      ) {
+        throw new Error(
+          `Invalid selling price for ${product.productName}`
+        );
+      }
+
+      const totalPrice = Number(
+        (price * quantity).toFixed(2)
+      );
+
+      subtotal += totalPrice;
+
+      paymentItems.push({
+        productId: product.id,
+        quantity,
+        price,
+        totalPrice,
+      });
     }
 
-    if (finalPrice.lessThan(0)) {
-      throw new Error(
-        "Final price cannot be negative"
-      );
-    }
-
-    // --------------------------------------------------
-    // Validate payment amount
-    // --------------------------------------------------
-
-    const paidAmount = new Prisma.Decimal(amount);
-
-    if (paidAmount.lessThan(0)) {
-      throw new Error(
-        "Payment amount cannot be negative"
-      );
-    }
-
-    if (paidAmount.greaterThan(finalPrice)) {
-      throw new Error(
-        `Payment amount cannot exceed final price ${finalPrice.toFixed(
-          2
-        )}`
-      );
-    }
-
-    const paymentStatus = calculatePaymentStatus(
-      paidAmount,
-      finalPrice
+    subtotal = Number(
+      subtotal.toFixed(2)
     );
 
-    // --------------------------------------------------
-    // Generate payment number
-    // --------------------------------------------------
+    const discountAmount =
+      calculateDiscount({
+        subtotal,
+        discountType,
+        discountValue,
+      });
+
+    const finalAmount = Number(
+      Math.max(
+        subtotal - discountAmount,
+        0
+      ).toFixed(2)
+    );
+
+    /*
+     * Your current requirement is complete payment.
+     * So paidAmount automatically equals finalAmount.
+     */
+    const paidAmount = finalAmount;
+    const dueAmount = 0;
+    const status = "PAID";
 
     const paymentNumber =
       await getUniquePaymentNumber(tx);
 
-    // --------------------------------------------------
-    // Create payment
-    // --------------------------------------------------
+    // Create payment and items
 
-    const payment = await tx.payment.create({
-      data: {
-        paymentNumber,
-
-        userId: loggedInUserId,
-        productId,
-
-        customerName,
-        quantity,
-
-        price,
-        totalPrice,
-
-        /*
-         * For invoice payment, invoice discount is stored.
-         * For direct payment, request discount is stored.
-         */
-        discountValue: invoice
-          ? new Prisma.Decimal(0)
-          : fixedDiscount,
-
-        discountPercent: invoice
-          ? new Prisma.Decimal(0)
-          : percentageDiscount,
-
-        discountAmount: calculatedDiscountAmount,
-
-        finalPrice,
-
-        paymentMethod,
-        amount: paidAmount,
-        currency,
-        paymentStatus,
-      },
-
-      include: {
-        user: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-          },
-        },
-
-        product: {
-          select: {
-            id: true,
-            productName: true,
-            productImage: true,
-            stock: true,
-            sellingPrice: true,
-          },
-        },
-      },
-    });
-
-    // --------------------------------------------------
-    // Update invoice
-    // --------------------------------------------------
-
-    let updatedInvoice = null;
-
-    if (invoice) {
-      const invoiceTotal = new Prisma.Decimal(
-        invoice.totalAmount
-      );
-
-      const existingPaidAmount = new Prisma.Decimal(
-        invoice.paidAmount
-      );
-
-      const newPaidAmount =
-        existingPaidAmount.plus(paidAmount);
-
-      if (newPaidAmount.greaterThan(invoiceTotal)) {
-        throw new Error(
-          `Total paid amount cannot exceed invoice total ${invoiceTotal.toFixed(
-            2
-          )}`
-        );
-      }
-
-      const newDueAmount =
-        invoiceTotal.minus(newPaidAmount);
-
-      const invoiceStatus = calculateInvoiceStatus(
-        newPaidAmount,
-        invoiceTotal
-      );
-
-      updatedInvoice = await tx.invoice.update({
-        where: {
-          id: invoice.id,
-        },
+    const payment =
+      await tx.payment.create({
         data: {
-          paymentId: payment.id,
-          paidAmount: newPaidAmount,
-          dueAmount: newDueAmount,
-          status: invoiceStatus,
-        },
-        include: {
+          paymentNumber,
+          customerName:
+            customerName || null,
+
+          paymentMethod,
+          currency,
+
+          subtotal,
+
+          discountType:
+            discountType || null,
+
+          discountValue:
+            Number(discountValue || 0),
+
+          discountAmount,
+
+          finalAmount,
+          paidAmount,
+          dueAmount,
+          status,
+
+          userId: loggedInUserId,
+
           items: {
-            include: {
-              product: true,
+            create: paymentItems,
+          },
+        },
+
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
             },
           },
-          payment: true,
-          discounts: true,
-          returns: true,
+
+          items: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  productName: true,
+                  productImage: true,
+                  productPrice: true,
+                  gst: true,
+                  sellingPrice: true,
+                  stock: true,
+                },
+              },
+            },
+          },
         },
       });
-    }
 
-    // --------------------------------------------------
-    // Reduce stock for direct payment
-    // --------------------------------------------------
+    // Reduce stock
 
-    let updatedProduct = product;
-
-    if (!invoiceId) {
-      updatedProduct = await tx.product.update({
+    for (const item of paymentItems) {
+      await tx.product.update({
         where: {
-          id: productId,
+          id: item.productId,
         },
         data: {
           stock: {
-            decrement: quantity,
+            decrement: item.quantity,
           },
-          updatedBy: loggedInUserId,
+          updatedBy:
+            loggedInUserId,
         },
       });
     }
 
-    // --------------------------------------------------
-    // Audit
-    // --------------------------------------------------
+    // Audit log
 
     await tx.audit.create({
       data: {
@@ -524,30 +388,33 @@ export const createPaymentService = async (
         oldValue: Prisma.JsonNull,
 
         newValue: makeJsonSafe({
-          paymentId: payment.id,
-          paymentNumber: payment.paymentNumber,
-          invoiceId: invoiceId || null,
-          productId,
-          customerName,
-          quantity,
-          totalPrice,
-          discountAmount: calculatedDiscountAmount,
-          finalPrice,
-          amount: paidAmount,
+          id: payment.id,
+          paymentNumber:
+            payment.paymentNumber,
+          customerName:
+            payment.customerName,
+          products: paymentItems,
+          subtotal,
+          discountType:
+            discountType || null,
+          discountValue:
+            Number(discountValue || 0),
+          discountAmount,
+          finalAmount,
+          paidAmount,
+          dueAmount,
+          status,
           paymentMethod,
-          paymentStatus,
         }),
 
-        createdBy: loggedInUserId,
-        userId: loggedInUserId,
+        createdBy:
+          loggedInUserId,
+        userId:
+          loggedInUserId,
       },
     });
 
-    return {
-      payment,
-      invoice: updatedInvoice,
-      product: updatedProduct,
-    };
+    return payment;
   });
 };
 
@@ -557,7 +424,7 @@ export const createPaymentService = async (
 
 export const getAllPaymentsService = async ({
   search,
-  paymentStatus,
+  status,
   paymentMethod,
   startDate,
   endDate,
@@ -567,35 +434,18 @@ export const getAllPaymentsService = async ({
   const currentPage = Number(page);
   const pageLimit = Number(limit);
 
-  if (
-    !Number.isInteger(currentPage) ||
-    currentPage <= 0
-  ) {
-    throw new Error(
-      "Page must be a positive integer"
-    );
-  }
-
-  if (
-    !Number.isInteger(pageLimit) ||
-    pageLimit <= 0 ||
-    pageLimit > 100
-  ) {
-    throw new Error(
-      "Limit must be between 1 and 100"
-    );
-  }
-
-  const skip = (currentPage - 1) * pageLimit;
+  const skip =
+    (currentPage - 1) * pageLimit;
 
   const where = {};
 
-  if (paymentStatus) {
-    where.paymentStatus = paymentStatus;
+  if (status) {
+    where.status = status;
   }
 
   if (paymentMethod) {
-    where.paymentMethod = paymentMethod;
+    where.paymentMethod =
+      paymentMethod;
   }
 
   if (search) {
@@ -611,16 +461,20 @@ export const getAllPaymentsService = async ({
         },
       },
       {
-        product: {
-          productName: {
+        user: {
+          fullName: {
             contains: search,
           },
         },
       },
       {
-        user: {
-          fullName: {
-            contains: search,
+        items: {
+          some: {
+            product: {
+              productName: {
+                contains: search,
+              },
+            },
           },
         },
       },
@@ -631,102 +485,130 @@ export const getAllPaymentsService = async ({
     where.createdAt = {};
 
     if (startDate) {
-      const parsedStartDate = new Date(startDate);
+      const start =
+        new Date(startDate);
 
-      if (Number.isNaN(parsedStartDate.getTime())) {
-        throw new Error("Invalid startDate");
+      if (
+        Number.isNaN(start.getTime())
+      ) {
+        throw new Error(
+          "Invalid start date"
+        );
       }
 
-      parsedStartDate.setHours(0, 0, 0, 0);
-      where.createdAt.gte = parsedStartDate;
+      start.setHours(0, 0, 0, 0);
+      where.createdAt.gte = start;
     }
 
     if (endDate) {
-      const parsedEndDate = new Date(endDate);
+      const end =
+        new Date(endDate);
 
-      if (Number.isNaN(parsedEndDate.getTime())) {
-        throw new Error("Invalid endDate");
+      if (
+        Number.isNaN(end.getTime())
+      ) {
+        throw new Error(
+          "Invalid end date"
+        );
       }
 
-      parsedEndDate.setHours(23, 59, 59, 999);
-      where.createdAt.lte = parsedEndDate;
+      end.setHours(
+        23,
+        59,
+        59,
+        999
+      );
+
+      where.createdAt.lte = end;
     }
   }
 
-  const [payments, totalRecords, totals] =
-    await Promise.all([
-      prisma.payment.findMany({
-        where,
+  const [
+    payments,
+    totalRecords,
+    totals,
+  ] = await Promise.all([
+    prisma.payment.findMany({
+      where,
 
-        include: {
-          user: {
-            select: {
-              id: true,
-              fullName: true,
-              email: true,
-            },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
           },
+        },
 
-          product: {
-            select: {
-              id: true,
-              productName: true,
-              productImage: true,
-              stock: true,
-              sellingPrice: true,
-            },
-          },
-
-          invoice: {
-            select: {
-              id: true,
-              invoiceNumber: true,
-              customerName: true,
-              totalAmount: true,
-              paidAmount: true,
-              dueAmount: true,
-              status: true,
-              createdAt: true,
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                productName: true,
+                productImage: true,
+                productPrice: true,
+                gst: true,
+                sellingPrice: true,
+              },
             },
           },
         },
 
-        orderBy: {
-          createdAt: "desc",
+        invoice: {
+          select: {
+            id: true,
+            invoiceNumber: true,
+            totalAmount: true,
+            paidAmount: true,
+            dueAmount: true,
+            status: true,
+          },
         },
+      },
 
-        skip,
-        take: pageLimit,
-      }),
+      orderBy: {
+        createdAt: "desc",
+      },
 
-      prisma.payment.count({
-        where,
-      }),
+      skip,
+      take: pageLimit,
+    }),
 
-      prisma.payment.aggregate({
-        where,
-        _sum: {
-          amount: true,
-          finalPrice: true,
-          discountAmount: true,
-        },
-      }),
-    ]);
+    prisma.payment.count({
+      where,
+    }),
+
+    prisma.payment.aggregate({
+      where,
+      _sum: {
+        subtotal: true,
+        discountAmount: true,
+        finalAmount: true,
+        paidAmount: true,
+        dueAmount: true,
+      },
+    }),
+  ]);
 
   return {
     payments,
 
     summary: {
-      totalPaymentAmount:
-        totals._sum.amount ?? new Prisma.Decimal(0),
-
-      totalFinalPrice:
-        totals._sum.finalPrice ??
-        new Prisma.Decimal(0),
+      totalSubtotal:
+        totals._sum.subtotal || 0,
 
       totalDiscountAmount:
-        totals._sum.discountAmount ??
-        new Prisma.Decimal(0),
+        totals._sum.discountAmount || 0,
+
+      totalFinalAmount:
+        totals._sum.finalAmount || 0,
+
+      totalPaidAmount:
+        totals._sum.paidAmount || 0,
+
+      totalDueAmount:
+        totals._sum.dueAmount || 0,
     },
 
     pagination: {
@@ -747,232 +629,49 @@ export const getAllPaymentsService = async ({
 export const getPaymentByIdService = async (
   paymentId
 ) => {
-  if (!paymentId) {
-    throw new Error("Payment ID is required");
-  }
-
-  const payment = await prisma.payment.findUnique({
-    where: {
-      id: paymentId,
-    },
-
-    include: {
-      user: {
-        select: {
-          id: true,
-          fullName: true,
-          email: true,
-          phone: true,
-        },
+  const payment =
+    await prisma.payment.findUnique({
+      where: {
+        id: paymentId,
       },
 
-      product: true,
-
-      invoice: {
-        include: {
-          items: {
-            include: {
-              product: true,
-            },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
           },
-          discounts: true,
-          returns: true,
         },
-      },
-    },
-  });
 
-  if (!payment) {
-    throw new Error("Payment not found");
-  }
-
-  return payment;
-};
-
-// ======================================================
-// GET PAYMENT BY NUMBER
-// ======================================================
-
-export const getPaymentByNumberService = async (
-  paymentNumber
-) => {
-  if (!paymentNumber) {
-    throw new Error(
-      "Payment number is required"
-    );
-  }
-
-  const payment = await prisma.payment.findUnique({
-    where: {
-      paymentNumber,
-    },
-
-    include: {
-      user: {
-        select: {
-          id: true,
-          fullName: true,
-          email: true,
-          phone: true,
-        },
-      },
-
-      product: true,
-
-      invoice: {
-        include: {
-          items: {
-            include: {
-              product: true,
-            },
+        items: {
+          include: {
+            product: true,
           },
-          discounts: true,
-          returns: true,
         },
-      },
-    },
-  });
 
-  if (!payment) {
-    throw new Error("Payment not found");
-  }
-
-  return payment;
-};
-
-// ======================================================
-// UPDATE PAYMENT STATUS
-// ======================================================
-
-export const updatePaymentStatusService = async (
-  paymentId,
-  input,
-  loggedInUserId
-) => {
-  const { paymentStatus, remarks } = input;
-
-  return prisma.$transaction(async (tx) => {
-    const existingPayment =
-      await tx.payment.findUnique({
-        where: {
-          id: paymentId,
-        },
-        include: {
-          invoice: true,
-        },
-      });
-
-    if (!existingPayment) {
-      throw new Error("Payment not found");
-    }
-
-    if (
-      existingPayment.paymentStatus === "REFUNDED"
-    ) {
-      throw new Error(
-        "Refunded payment status cannot be changed"
-      );
-    }
-
-    if (paymentStatus === "REFUNDED") {
-      throw new Error(
-        "Use the refund API to refund a payment"
-      );
-    }
-
-    const paymentAmount = new Prisma.Decimal(
-      existingPayment.amount
-    );
-
-    const finalPrice = new Prisma.Decimal(
-      existingPayment.finalPrice
-    );
-
-    const calculatedStatus =
-      calculatePaymentStatus(
-        paymentAmount,
-        finalPrice
-      );
-
-    /*
-     * Prevent manual incorrect status changes.
-     */
-    if (paymentStatus !== calculatedStatus) {
-      throw new Error(
-        `Payment status must be ${calculatedStatus} according to the payment amount`
-      );
-    }
-
-    const updatedPayment =
-      await tx.payment.update({
-        where: {
-          id: paymentId,
-        },
-        data: {
-          paymentStatus: calculatedStatus,
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              fullName: true,
-              email: true,
+        invoice: {
+          include: {
+            items: {
+              include: {
+                product: true,
+              },
             },
+            discounts: true,
+            returns: true,
           },
-          product: true,
-          invoice: true,
         },
-      });
-
-    if (existingPayment.invoice) {
-      const invoicePaidAmount =
-        new Prisma.Decimal(
-          existingPayment.invoice.paidAmount
-        );
-
-      const invoiceTotalAmount =
-        new Prisma.Decimal(
-          existingPayment.invoice.totalAmount
-        );
-
-      const invoiceStatus =
-        calculateInvoiceStatus(
-          invoicePaidAmount,
-          invoiceTotalAmount
-        );
-
-      await tx.invoice.update({
-        where: {
-          id: existingPayment.invoice.id,
-        },
-        data: {
-          status: invoiceStatus,
-        },
-      });
-    }
-
-    await tx.audit.create({
-      data: {
-        action: "UPDATE_PAYMENT_STATUS",
-        table: "Payment",
-
-        oldValue: makeJsonSafe({
-          paymentStatus:
-            existingPayment.paymentStatus,
-        }),
-
-        newValue: makeJsonSafe({
-          paymentStatus: calculatedStatus,
-          remarks: remarks || null,
-        }),
-
-        createdBy: loggedInUserId,
-        userId: loggedInUserId,
       },
     });
 
-    return updatedPayment;
-  });
+  if (!payment) {
+    throw new Error(
+      "Payment not found"
+    );
+  }
+
+  return payment;
 };
 
 // ======================================================
@@ -984,225 +683,116 @@ export const refundPaymentService = async (
   input,
   loggedInUserId
 ) => {
-  const { refundAmount, remarks } = input;
+  const { remarks } = input;
 
-  return prisma.$transaction(async (tx) => {
-    const payment = await tx.payment.findUnique({
-      where: {
-        id: paymentId,
-      },
-      include: {
-        invoice: true,
-        product: true,
-      },
-    });
+  return prisma.$transaction(
+    async (tx) => {
+      const payment =
+        await tx.payment.findUnique({
+          where: {
+            id: paymentId,
+          },
 
-    if (!payment) {
-      throw new Error("Payment not found");
-    }
+          include: {
+            invoice: true,
 
-    if (payment.paymentStatus === "REFUNDED") {
-      throw new Error(
-        "Payment has already been refunded"
-      );
-    }
-
-    const decimalRefundAmount =
-      new Prisma.Decimal(refundAmount);
-
-    const paymentAmount =
-      new Prisma.Decimal(payment.amount);
-
-    if (decimalRefundAmount.lessThanOrEqualTo(0)) {
-      throw new Error(
-        "Refund amount must be greater than zero"
-      );
-    }
-
-    /*
-     * Current schema and PaymentStatus enum do not
-     * support partial refund status.
-     */
-    if (!decimalRefundAmount.equals(paymentAmount)) {
-      throw new Error(
-        "Only full payment refund is supported. Refund amount must equal payment amount"
-      );
-    }
-
-    const updatedPayment =
-      await tx.payment.update({
-        where: {
-          id: paymentId,
-        },
-        data: {
-          paymentStatus: "REFUNDED",
-        },
-        include: {
-          product: true,
-          invoice: true,
-          user: {
-            select: {
-              id: true,
-              fullName: true,
-              email: true,
+            items: {
+              include: {
+                product: true,
+              },
             },
           },
-        },
-      });
+        });
 
-    /*
-     * Current schema has one payment per invoice.
-     * Therefore the complete invoice payment is reversed.
-     */
-    if (payment.invoice) {
-      await tx.invoice.update({
-        where: {
-          id: payment.invoice.id,
-        },
-        data: {
-          paidAmount: new Prisma.Decimal(0),
-          dueAmount:
-            payment.invoice.totalAmount,
-          status: "REFUNDED",
-        },
-      });
-    } else {
-      /*
-       * Direct payment reduced stock during creation,
-       * therefore restore stock during refund.
-       */
-      await tx.product.update({
-        where: {
-          id: payment.productId,
-        },
-        data: {
-          stock: {
-            increment: payment.quantity,
+      if (!payment) {
+        throw new Error(
+          "Payment not found"
+        );
+      }
+
+      if (
+        payment.status ===
+        "REFUNDED"
+      ) {
+        throw new Error(
+          "Payment is already refunded"
+        );
+      }
+
+      const updatedPayment =
+        await tx.payment.update({
+          where: {
+            id: paymentId,
           },
-          updatedBy: loggedInUserId,
+          data: {
+            status: "REFUNDED",
+          },
+          include: {
+            items: {
+              include: {
+                product: true,
+              },
+            },
+          },
+        });
+
+      // Restore product stock
+
+      for (const item of payment.items) {
+        await tx.product.update({
+          where: {
+            id: item.productId,
+          },
+          data: {
+            stock: {
+              increment:
+                item.quantity,
+            },
+            updatedBy:
+              loggedInUserId,
+          },
+        });
+      }
+
+      if (payment.invoice) {
+        await tx.invoice.update({
+          where: {
+            id: payment.invoice.id,
+          },
+          data: {
+            status: "REFUNDED",
+            paidAmount: 0,
+            dueAmount:
+              payment.invoice.totalAmount,
+          },
+        });
+      }
+
+      await tx.audit.create({
+        data: {
+          action:
+            "REFUND_PAYMENT",
+          table: "Payment",
+
+          oldValue: makeJsonSafe({
+            status:
+              payment.status,
+          }),
+
+          newValue: makeJsonSafe({
+            status: "REFUNDED",
+            remarks:
+              remarks || null,
+          }),
+
+          createdBy:
+            loggedInUserId,
+          userId:
+            loggedInUserId,
         },
       });
+
+      return updatedPayment;
     }
-
-    await tx.audit.create({
-      data: {
-        action: "REFUND_PAYMENT",
-        table: "Payment",
-
-        oldValue: makeJsonSafe({
-          paymentStatus:
-            payment.paymentStatus,
-          amount: payment.amount,
-        }),
-
-        newValue: makeJsonSafe({
-          paymentStatus: "REFUNDED",
-          refundAmount:
-            decimalRefundAmount,
-          remarks: remarks || null,
-        }),
-
-        createdBy: loggedInUserId,
-        userId: loggedInUserId,
-      },
-    });
-
-    return updatedPayment;
-  });
-};
-
-// ======================================================
-// PAYMENT STATISTICS
-// ======================================================
-
-export const getPaymentStatsService = async () => {
-  const [
-    totalPayments,
-    paidPayments,
-    pendingPayments,
-    partialPayments,
-    refundedPayments,
-    paymentAmountSummary,
-    methodGroups,
-  ] = await Promise.all([
-    prisma.payment.count(),
-
-    prisma.payment.count({
-      where: {
-        paymentStatus: "PAID",
-      },
-    }),
-
-    prisma.payment.count({
-      where: {
-        paymentStatus: "PENDING",
-      },
-    }),
-
-    prisma.payment.count({
-      where: {
-        paymentStatus: "PARTIAL",
-      },
-    }),
-
-    prisma.payment.count({
-      where: {
-        paymentStatus: "REFUNDED",
-      },
-    }),
-
-    prisma.payment.aggregate({
-      where: {
-        paymentStatus: {
-          in: ["PAID", "PARTIAL"],
-        },
-      },
-      _sum: {
-        amount: true,
-        finalPrice: true,
-        discountAmount: true,
-      },
-    }),
-
-    prisma.payment.groupBy({
-      by: ["paymentMethod"],
-      _count: {
-        id: true,
-      },
-      _sum: {
-        amount: true,
-      },
-    }),
-  ]);
-
-  return {
-    totalPayments,
-    paidPayments,
-    pendingPayments,
-    partialPayments,
-    refundedPayments,
-
-    totalCollectedAmount:
-      paymentAmountSummary._sum.amount ??
-      new Prisma.Decimal(0),
-
-    totalFinalPrice:
-      paymentAmountSummary._sum.finalPrice ??
-      new Prisma.Decimal(0),
-
-    totalDiscountAmount:
-      paymentAmountSummary._sum
-        .discountAmount ??
-      new Prisma.Decimal(0),
-
-    paymentMethods: methodGroups.map(
-      (group) => ({
-        paymentMethod: group.paymentMethod,
-        count: group._count.id,
-        totalAmount:
-          group._sum.amount ??
-          new Prisma.Decimal(0),
-      })
-    ),
-  };
+  );
 };

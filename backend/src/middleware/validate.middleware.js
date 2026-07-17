@@ -1,37 +1,44 @@
-// 
-
-
 export const validate = (schema) => {
   return async (req, res, next) => {
     try {
-      const validatedData = await schema.parseAsync({
-        body: req.body || {},
-        query: req.query || {},
-        params: req.params || {},
-      });
+      const validatedData =
+        await schema.parseAsync({
+          body: req.body || {},
+          query: req.query || {},
+          params: req.params || {},
+        });
 
       if (validatedData.body !== undefined) {
         req.body = validatedData.body;
       }
 
-      // Avoid changing req.query directly
-      // because some Express versions expose it as read-only
       if (validatedData.query !== undefined) {
-        req.validatedQuery = validatedData.query;
+        Object.assign(
+          req.query,
+          validatedData.query
+        );
       }
 
       if (validatedData.params !== undefined) {
-        Object.assign(req.params, validatedData.params);
+        Object.assign(
+          req.params,
+          validatedData.params
+        );
       }
 
       return next();
     } catch (error) {
-  
       const errors =
         error?.issues?.map((issue) => ({
           field: issue.path
-            .filter((item) => item !== "body")
+            .filter(
+              (value) =>
+                value !== "body" &&
+                value !== "query" &&
+                value !== "params"
+            )
             .join("."),
+
           message: issue.message,
           code: issue.code,
         })) || [];

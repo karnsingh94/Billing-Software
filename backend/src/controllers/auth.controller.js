@@ -1,10 +1,83 @@
-import validator from "validator";
-import bcrypt from "bcryptjs";
-import prisma from "../db/db.js";
-import jwt from "jsonwebtoken";
+import {
+  signupService,
+  loginService,
+  createAdminService,
+  createUserService,
+  logoutService,
+  getMeService,
+} from "../services/auth.service.js";
+
+// ======================================================
+// ERROR STATUS HELPER
+// ======================================================
+
+const getErrorStatusCode = (message = "") => {
+  const normalizedMessage = String(message).toLowerCase();
+
+  if (
+    normalizedMessage.includes("invalid credentials") ||
+    normalizedMessage.includes("unauthorized") ||
+    normalizedMessage.includes("invalid token") ||
+    normalizedMessage.includes("expired token")
+  ) {
+    return 401;
+  }
+
+  if (
+    normalizedMessage.includes("only super admin") ||
+    normalizedMessage.includes("only admin") ||
+    normalizedMessage.includes("forbidden")
+  ) {
+    return 403;
+  }
+
+  if (normalizedMessage.includes("not found")) {
+    return 404;
+  }
+
+  if (
+    normalizedMessage.includes("already exists") ||
+    normalizedMessage.includes("required") ||
+    normalizedMessage.includes("invalid") ||
+    normalizedMessage.includes("must") ||
+    normalizedMessage.includes("cannot")
+  ) {
+    return 400;
+  }
+
+  return 500;
+};
+
+// ======================================================
+// COMMON ERROR RESPONSE
+// ======================================================
+
+const sendErrorResponse = (
+  res,
+  error,
+  fallbackMessage = "Internal Server Error"
+) => {
+  console.error("AUTH CONTROLLER ERROR:", error);
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : fallbackMessage;
+
+  return res.status(getErrorStatusCode(message)).json({
+    success: false,
+    message: message || fallbackMessage,
+  });
+};
+
+// ======================================================
+// SIGNUP SUPER ADMIN
+// POST /api/v1/auth/signup
+// ======================================================
 
 const signup = async (req, res) => {
   try {
+<<<<<<< HEAD
     const { fullName, email, password, phone, location } = req.body;
 
     if (!fullName || !email || !password || !phone || !location) {
@@ -77,20 +150,25 @@ const signup = async (req, res) => {
     });
 
     const { password: _, ...superAdminWithoutPassword } = superAdmin;
+=======
+    const superAdmin = await signupService(req.body);
+>>>>>>> 3b53bc7 (feat: add period report generation functionality with date range filtering)
 
     return res.status(201).json({
       success: true,
       message: "Super admin created successfully",
-      superAdmin: superAdminWithoutPassword,
+      superAdmin,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Internal Server Error",
-    });
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to create super admin"
+    );
   }
 };
 
+<<<<<<< HEAD
 
 //====================================updatePassword=================================
 
@@ -165,249 +243,208 @@ const updatePassword = async (req, res) => {
 };
 
 //==================================== login=================================
+=======
+// ======================================================
+// LOGIN
+// POST /api/v1/auth/login
+// ======================================================
+>>>>>>> 3b53bc7 (feat: add period report generation functionality with date range filtering)
 
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Email and password are required.",
-      });
-    }
-
-    if (!validator.isEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid email format.",
-      });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email: email.trim().toLowerCase() },
-    });
-
-    if (!user || !user.password) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid credentials.",
-      });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
-    }
-
-    const accessToken = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        parentId: user.createdById || null,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      },
-    );
+    const {
+      user,
+      accessToken,
+    } = await loginService(req.body);
 
     res.cookie("accessToken", accessToken, {
       httpOnly: true,
-      secure: false,
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+
+      secure:
+        process.env.NODE_ENV === "production",
+
+      sameSite:
+        process.env.NODE_ENV === "production"
+          ? "none"
+          : "lax",
+
+      maxAge:
+        7 * 24 * 60 * 60 * 1000,
     });
 
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
-      message: "Login successfully",
+      message: "Login successful",
       user,
       accessToken,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Internal Server Error",
-    });
+    return sendErrorResponse(
+      res,
+      error,
+      "Login failed"
+    );
   }
 };
 
-// ===============================create Admin==============================
+// ======================================================
+// CREATE ADMIN
+// POST /api/v1/auth/create-admin
+// ======================================================
 
 const createAdmin = async (req, res) => {
   try {
-    const { fullName, email, password, phone, location } = req.body;
+    const loggedInUser = req.user;
 
-    if (!fullName || !email || !password || !phone || !location) {
-      return res.status(400).json({
+    if (!loggedInUser?.id) {
+      return res.status(401).json({
         success: false,
-        message: "All fields are required",
+        message: "Unauthorized user",
       });
     }
 
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [{ email: email.trim().toLowerCase() }, { phone: phone.trim() }],
-      },
-    });
-
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "Email or phone already exists",
-      });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const admin = await prisma.user.create({
-      data: {
-        fullName: fullName.trim(),
-        email: email.trim().toLowerCase(),
-        password: hashedPassword,
-        phone: phone.trim(),
-        location: location.trim(),
-        role: "ADMIN",
-
-        // yahi super-admin ka id hai
-        createdById: req.user.id,
-      },
-    });
-
-    const { password: _, ...adminWithoutPassword } = admin;
+    const admin = await createAdminService(
+      req.body,
+      loggedInUser
+    );
 
     return res.status(201).json({
       success: true,
       message: "Admin created successfully",
-      admin: adminWithoutPassword,
+      admin,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Internal Server Error",
-    });
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to create admin"
+    );
   }
 };
 
+<<<<<<< HEAD
 // ==============================create User==============================
+=======
+// ======================================================
+// CREATE NORMAL USER
+// POST /api/v1/auth/create-user
+// ======================================================
+>>>>>>> 3b53bc7 (feat: add period report generation functionality with date range filtering)
 
 const createUser = async (req, res) => {
   try {
-    const { fullName, email, password, phone, location } = req.body;
+    const loggedInUser = req.user;
 
-    // 1) required fields
-    if (!fullName || !email || !password || !phone || !location) {
-      return res.status(400).json({
+    if (!loggedInUser?.id) {
+      return res.status(401).json({
         success: false,
-        message: "All fields are required",
+        message: "Unauthorized user",
       });
     }
 
-    // 2) email validation
-    if (!validator.isEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid email format",
-      });
-    }
-
-    // 3) password validation
-    if (!validator.isStrongPassword(password)) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Password must be at least 8 characters and include uppercase, lowercase, number and symbol",
-      });
-    }
-
-    // 4) phone validation
-    if (!validator.isMobilePhone(phone, "any")) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid phone number",
-      });
-    }
-
-    // 5) only ADMIN can create user
-    if (req.user.role !== "ADMIN") {
-      return res.status(403).json({
-        success: false,
-        message: "Only admin can create user",
-      });
-    }
-
-    // 6) email/phone already exists check
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [{ email: email.trim().toLowerCase() }, { phone: phone.trim() }],
-      },
-    });
-
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "Email or phone already exists",
-      });
-    }
-
-    // 7) password hash
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // 8) create user
-    const newUser = await prisma.user.create({
-      data: {
-        fullName: fullName.trim(),
-        email: email.trim().toLowerCase(),
-        password: hashedPassword,
-        phone: phone.trim(),
-        location: location.trim(),
-        role: "USER",
-        createdById: req.user.id,
-      },
-    });
-
-    // 9) remove password from response
-    const { password: _, ...userWithoutPassword } = newUser;
+    const user = await createUserService(
+      req.body,
+      loggedInUser
+    );
 
     return res.status(201).json({
       success: true,
       message: "User created successfully",
-      user: userWithoutPassword,
+      user,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Internal Server Error",
-    });
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to create user"
+    );
   }
 };
 
-// ============================logout=============================
+// ======================================================
+// LOGOUT
+// POST /api/v1/auth/logout
+// ======================================================
 
 const logout = async (req, res) => {
-  res.clearCookie("accessToken");
+  try {
+    const loggedInUser = req.user;
 
-  return res.status(200).json({
-    success: true,
-    message: "Logout successfully",
-  });
+    if (!loggedInUser?.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized user",
+      });
+    }
+
+    await logoutService(loggedInUser);
+
+    res.clearCookie("accessToken", {
+      httpOnly: true,
+
+      secure:
+        process.env.NODE_ENV === "production",
+
+      sameSite:
+        process.env.NODE_ENV === "production"
+          ? "none"
+          : "lax",
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Logout successful",
+    });
+  } catch (error) {
+    return sendErrorResponse(
+      res,
+      error,
+      "Logout failed"
+    );
+  }
 };
 
-// ============================getMe=============================
+// ======================================================
+// GET CURRENT USER
+// GET /api/v1/auth/me
+// ======================================================
 
 const getMe = async (req, res) => {
-  const { password: _, ...userWithoutPassword } = req.user;
+  try {
+    const userId = req.user?.id;
 
-  return res.status(200).json({
-    success: true,
-    user: userWithoutPassword,
-  });
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized user",
+      });
+    }
+
+    const user = await getMeService(userId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Current user fetched successfully",
+      user,
+    });
+  } catch (error) {
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to fetch current user"
+    );
+  }
 };
 
+<<<<<<< HEAD
 export { signup, updatePassword, login, createAdmin, createUser, logout, getMe };
+=======
+export {
+  signup,
+  login,
+  createAdmin,
+  createUser,
+  logout,
+  getMe,
+};
+>>>>>>> 3b53bc7 (feat: add period report generation functionality with date range filtering)
