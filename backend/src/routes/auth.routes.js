@@ -3,7 +3,7 @@ import { Router } from "express";
 
 import {
   signup,
-  updatePassword,
+  
   login,
   createAdmin,
   createUser,
@@ -43,6 +43,7 @@ router.post(
 );
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 // ======================================================
 // 2. LOGIN
 // ======================================================
@@ -53,6 +54,13 @@ router.put(
   updatePassword
 );
 >>>>>>> 947b731435aff8b13b0cd129ddb841c7a54a44d9
+=======
+// router.put(
+//   "/update-password",
+//   isAuth,
+//   updatePassword
+// );
+>>>>>>> 45ef114245a36b8b7b3d7ac6c7e82badfc6849cc
 
 router.post(
   "/login",

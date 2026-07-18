@@ -134,10 +134,14 @@ const sendErrorResponse = (
 
 const signup = async (req, res) => {
   try {
+<<<<<<< HEAD
     const superAdmin =
       await signupService(
         req.body
       );
+=======
+    const superAdmin = await signupService(req.body);
+>>>>>>> 45ef114245a36b8b7b3d7ac6c7e82badfc6849cc
 
     return res.status(201).json({
       success: true,
@@ -156,6 +160,7 @@ const signup = async (req, res) => {
   }
 };
 
+<<<<<<< HEAD
 // ======================================================
 // 2. UPDATE PASSWORD
 // PUT /api/v1/auth/update-password
@@ -321,6 +326,8 @@ const updatePassword = async (
 // 3. LOGIN
 // POST /api/v1/auth/login
 // ======================================================
+=======
+>>>>>>> 45ef114245a36b8b7b3d7ac6c7e82badfc6849cc
 
 const login = async (
   req,
@@ -425,10 +432,13 @@ const createAdmin = async (
   }
 };
 
+<<<<<<< HEAD
 // ======================================================
 // 5. CREATE NORMAL USER
 // POST /api/v1/auth/create-user
 // ======================================================
+=======
+>>>>>>> 45ef114245a36b8b7b3d7ac6c7e82badfc6849cc
 
 const createUser = async (
   req,
@@ -576,6 +586,10 @@ const getMe = async (
   }
 };
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 45ef114245a36b8b7b3d7ac6c7e82badfc6849cc
 export {
   signup,
   updatePassword,
@@ -585,4 +599,7 @@ export {
   logout,
   getMe,
 };
+<<<<<<< HEAD
 
+=======
+>>>>>>> 45ef114245a36b8b7b3d7ac6c7e82badfc6849cc
