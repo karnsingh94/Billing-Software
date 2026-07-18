@@ -29,38 +29,35 @@ import { validate } from "../middleware/validate.middleware.js";
 
 const router = Router();
 
-<<<<<<< HEAD
+
 // ======================================================
 // 1. SUPER ADMIN SIGNUP
 // ======================================================
 
-=======
->>>>>>> 947b731435aff8b13b0cd129ddb841c7a54a44d9
+
 router.post(
   "/signup",
   validate(signupSchema),
   signup
 );
 
-<<<<<<< HEAD
-<<<<<<< HEAD
+
 // ======================================================
 // 2. LOGIN
 // ======================================================
-=======
+
 router.put(
   "/update-password",
   isAuth,
   updatePassword
 );
->>>>>>> 947b731435aff8b13b0cd129ddb841c7a54a44d9
-=======
+
 // router.put(
 //   "/update-password",
 //   isAuth,
 //   updatePassword
 // );
->>>>>>> 45ef114245a36b8b7b3d7ac6c7e82badfc6849cc
+
 
 router.post(
   "/login",
