@@ -2,7 +2,7 @@ import { Router } from "express";
 
 import {
   signup,
-  updatePassword,
+  
   login,
   createAdmin,
   createUser,
@@ -33,11 +33,11 @@ router.post(
   signup
 );
 
-router.put(
-  "/update-password",
-  isAuth,
-  updatePassword
-);
+// router.put(
+//   "/update-password",
+//   isAuth,
+//   updatePassword
+// );
 
 router.post(
   "/login",
