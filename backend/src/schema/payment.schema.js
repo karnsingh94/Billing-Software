@@ -27,17 +27,9 @@ export const createPaymentSchema = z.object({
       "BANK_TRANSFER",
     ]),
 
-    discountType: z
-      .enum(["PERCENTAGE", "FIXED"])
-      .optional()
-      .nullable(),
-
-    discountValue: z.coerce
-      .number()
-      .min(0, "Discount cannot be negative")
-      .optional()
-      .default(0),
-
+    couponCode: z.string()
+      .trim()
+      .optional(),
     currency: z
       .string()
       .trim()

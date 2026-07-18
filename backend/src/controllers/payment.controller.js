@@ -78,7 +78,7 @@ export const createPaymentController = async (
           "Unauthorized user",
       });
     }
-
+console.log(req.body)
     const payment =
       await createPaymentService(
         req.body,

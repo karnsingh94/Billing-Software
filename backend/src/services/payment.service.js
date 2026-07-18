@@ -121,8 +121,8 @@ export const createPaymentService = async (
   const {
     customerName,
     paymentMethod,
-    discountType,
-    discountValue = 0,
+  
+     couponCode,
     currency = "INR",
     products,
   } = input;
@@ -130,7 +130,7 @@ export const createPaymentService = async (
   if (!loggedInUserId) {
     throw new Error("Unauthorized user");
   }
-
+console.log(couponCode)
   if (
     !Array.isArray(products) ||
     products.length === 0
@@ -160,7 +160,12 @@ export const createPaymentService = async (
     }
 
     // Validate duplicate product IDs
-
+    const discount = await prisma.coupon.findFirst({
+      where:{
+     couponCode:couponCode
+      }
+    })
+console.log(discount)
     const productIds = products.map(
       (item) => item.productId
     );
@@ -275,19 +280,70 @@ export const createPaymentService = async (
       subtotal.toFixed(2)
     );
 
-    const discountAmount =
-      calculateDiscount({
-        subtotal,
-        discountType,
-        discountValue,
-      });
+    // const discountAmount =
+    //   calculateDiscount({
+    //     subtotal,
+    //     discountType,
+    //     discountValue,
+    //   });
+  let  discountAmount = 0;
+if (
+    discount.discountType ===
+      "PERCENTAGE"
+    ) {
+      discountAmount =
+        (subtotal *
+        discount.discountValue) /
+        100;
 
-    const finalAmount = Number(
-      Math.max(
-        subtotal - discountAmount,
-        0
-      ).toFixed(2)
+      /*
+        Percentage discount par maximum
+        discount limit lagayenge.
+      */
+
+      if (
+      discount.maxDiscountAmount !==
+          null &&
+        discountAmount >
+        discount.maxDiscountAmount
+      ) {
+        discountAmount =
+        discount.maxDiscountAmount;
+      }
+    }
+
+    // ==================================================
+    // FIXED DISCOUNT
+    // ==================================================
+
+    if (
+    discount.discountType ===
+      "FIXED"
+    ) {
+      discountAmount =
+      discount.discountValue;
+    }
+
+    /*
+      Discount bill amount se zyada
+      nahi ho sakta.
+    */
+
+    discountAmount = Math.min(
+      discountAmount,
+      subtotal
     );
+
+    const finalAmount =
+    subtotal
+     -
+      discountAmount;
+    // const finalAmount = Number(
+    //   Math.max(
+    //     subtotal - discount.discountValue,
+    //     0
+    //   ).toFixed(2)
+    // );
 
     /*
      * Your current requirement is complete payment.
@@ -314,13 +370,11 @@ export const createPaymentService = async (
 
           subtotal,
 
-          discountType:
-            discountType || null,
+          discountType:discount.discountType,
 
-          discountValue:
-            Number(discountValue || 0),
+          discountValue: discount.discountValue,
 
-          discountAmount,
+          // discountAmount,
 
           finalAmount,
           paidAmount,
@@ -395,11 +449,11 @@ export const createPaymentService = async (
             payment.customerName,
           products: paymentItems,
           subtotal,
-          discountType:
-            discountType || null,
-          discountValue:
-            Number(discountValue || 0),
-          discountAmount,
+      discountType:discount.discountType,
+
+            discountValue: discount.discountValue,
+
+            // discountAmount,
           finalAmount,
           paidAmount,
           dueAmount,
