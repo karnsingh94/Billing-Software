@@ -1,15 +1,17 @@
 
 import { Router } from "express";
-
 import {
   signup,
-  
   login,
   createAdmin,
   createUser,
   logout,
   getMe,
   updatePassword,
+  getAllAdmins,
+  getAllUsers,
+  toggleAdminStatus,
+  toggleUserStatus,
 } from "../controllers/auth.controller.js";
 
 import {
@@ -102,6 +104,8 @@ router.put(
   updatePassword
 );
 
+
+
 // ======================================================
 // 6. LOGOUT
 // ======================================================
@@ -120,6 +124,50 @@ router.get(
   "/me",
   isAuth,
   getMe
+);
+
+// ======================================================
+// 8. GET ALL ADMINS (SUPER ADMIN)
+// ======================================================
+
+router.get(
+  "/admins",
+  isAuth,
+  isSuperAdmin,
+  getAllAdmins
+);
+
+// ======================================================
+// 9. GET ALL USERS (ADMIN)
+// ======================================================
+
+router.get(
+  "/users",
+  isAuth,
+  isAdmin,
+  getAllUsers
+);
+
+// ======================================================
+// 10. ACTIVATE / DEACTIVATE ADMIN (SUPER ADMIN)
+// ======================================================
+
+router.patch(
+  "/admin/:id/status",
+  isAuth,
+  isSuperAdmin,
+  toggleAdminStatus
+);
+
+// ======================================================
+// 11. ACTIVATE / DEACTIVATE USER (ADMIN)
+// ======================================================
+
+router.patch(
+  "/user/:id/status",
+  isAuth,
+  isAdmin,
+  toggleUserStatus
 );
 
 export default router;

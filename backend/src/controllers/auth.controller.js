@@ -10,6 +10,10 @@ import {
   createUserService,
   logoutService,
   getMeService,
+  toggleUserStatusService,
+  toggleAdminStatusService,
+  getAllAdminsService,
+  getAllUsersService,
 } from "../services/auth.service.js";
 
 // ======================================================
@@ -583,6 +587,104 @@ const getMe = async (
   }
 };
 
+// ======================================================
+// 8. GET ALL ADMINS
+// GET /api/v1/auth/admins
+// ======================================================
+
+const getAllAdmins = async (req, res) => {
+  try {
+    const admins = await getAllAdminsService(req.user);
+
+    return res.status(200).json({
+      success: true,
+      message: "Admins fetched successfully",
+      admins,
+    });
+  } catch (error) {
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to fetch admins"
+    );
+  }
+};
+
+// ======================================================
+// 9. GET ALL USERS
+// GET /api/v1/auth/users
+// ======================================================
+
+const getAllUsers = async (req, res) => {
+  try {
+    const users = await getAllUsersService(req.user);
+
+    return res.status(200).json({
+      success: true,
+      message: "Users fetched successfully",
+      users,
+    });
+  } catch (error) {
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to fetch users"
+    );
+  }
+};
+
+// ======================================================
+// 10. TOGGLE ADMIN STATUS
+// PATCH /api/v1/auth/admin/:id/status
+// ======================================================
+
+const toggleAdminStatus = async (req, res) => {
+  try {
+    const admin = await toggleAdminStatusService(
+      req.params.id,
+      req.user
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin status updated successfully",
+      admin,
+    });
+  } catch (error) {
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to update admin status"
+    );
+  }
+};
+
+// ======================================================
+// 11. TOGGLE USER STATUS
+// PATCH /api/v1/auth/user/:id/status
+// ======================================================
+
+const toggleUserStatus = async (req, res) => {
+  try {
+    const user = await toggleUserStatusService(
+      req.params.id,
+      req.user
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "User status updated successfully",
+      user,
+    });
+  } catch (error) {
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to update user status"
+    );
+  }
+};
+
 
 export {
   signup,
@@ -592,5 +694,9 @@ export {
   createUser,
   logout,
   getMe,
+  getAllAdmins,
+  getAllUsers,
+  toggleAdminStatus,
+  toggleUserStatus,
 };
 

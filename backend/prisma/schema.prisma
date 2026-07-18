@@ -107,6 +107,7 @@ model User {
   returns        Return[]
   audits         Audit[]
   createdCoupons Coupon[]
+  isActive Boolean @default(true)
 
   // Report history
   reports Report[]

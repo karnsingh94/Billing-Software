@@ -566,3 +566,234 @@ export const getMeService = async (userId) => {
 
   return removePassword(user);
 };
+
+// ======================================================
+// GET ALL ADMINS
+// ======================================================
+
+export const getAllAdminsService = async (
+  loggedInUser
+) => {
+  if (!loggedInUser?.id) {
+    throw new Error("Unauthorized user");
+  }
+
+  if (loggedInUser.role !== "SUPER_ADMIN") {
+    throw new Error(
+      "Only super admin can view admins"
+    );
+  }
+
+  const admins = await prisma.user.findMany({
+    where: {
+      role: "ADMIN",
+      deletedAt: null,
+    },
+
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      phone: true,
+      location: true,
+      role: true,
+      isActive: true,
+      createdAt: true,
+      updatedAt: true,
+
+      creator: {
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+        },
+      },
+    },
+
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  return admins;
+};
+
+// ======================================================
+// GET ALL USERS
+// ======================================================
+
+export const getAllUsersService = async (
+  loggedInUser
+) => {
+  if (!loggedInUser?.id) {
+    throw new Error("Unauthorized user");
+  }
+
+  if (loggedInUser.role !== "ADMIN") {
+    throw new Error(
+      "Only admin can view users"
+    );
+  }
+
+  const users = await prisma.user.findMany({
+    where: {
+      role: "USER",
+      deletedAt: null,
+
+      createdById: loggedInUser.id,
+    },
+
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      phone: true,
+      location: true,
+      role: true,
+      isActive: true,
+      createdAt: true,
+      updatedAt: true,
+
+      creator: {
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+        },
+      },
+    },
+
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  return users;
+};
+
+// ======================================================
+// TOGGLE ADMIN STATUS
+// ======================================================
+
+export const toggleAdminStatusService = async (
+  adminId,
+  loggedInUser
+) => {
+  if (!loggedInUser?.id) {
+    throw new Error("Unauthorized user");
+  }
+
+  if (loggedInUser.role !== "SUPER_ADMIN") {
+    throw new Error(
+      "Only super admin can change admin status"
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const admin = await tx.user.findFirst({
+      where: {
+        id: adminId,
+        role: "ADMIN",
+        deletedAt: null,
+      },
+    });
+
+    if (!admin) {
+      throw new Error("Admin not found");
+    }
+
+    const updatedAdmin = await tx.user.update({
+      where: {
+        id: adminId,
+      },
+      data: {
+        isActive: !admin.isActive,
+      },
+    });
+
+    await createAuditRecord({
+      database: tx,
+
+      action: admin.isActive
+        ? "DEACTIVATE_ADMIN"
+        : "ACTIVATE_ADMIN",
+
+      table: "User",
+
+      oldValue: getSafeUserAuditValue(admin),
+
+      newValue: getSafeUserAuditValue(updatedAdmin),
+
+      userId: loggedInUser.id,
+
+      createdBy: loggedInUser.id,
+    });
+
+    return removePassword(updatedAdmin);
+  });
+};
+
+// ======================================================
+// TOGGLE USER STATUS
+// ======================================================
+
+export const toggleUserStatusService = async (
+  userId,
+  loggedInUser
+) => {
+  if (!loggedInUser?.id) {
+    throw new Error("Unauthorized user");
+  }
+
+  if (loggedInUser.role !== "ADMIN") {
+    throw new Error(
+      "Only admin can change user status"
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.findFirst({
+      where: {
+        id: userId,
+        role: "USER",
+        deletedAt: null,
+        createdById: loggedInUser.id,
+      },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const updatedUser = await tx.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        isActive: !user.isActive,
+      },
+    });
+
+    await createAuditRecord({
+      database: tx,
+
+      action: user.isActive
+        ? "DEACTIVATE_USER"
+        : "ACTIVATE_USER",
+
+      table: "User",
+
+      oldValue: getSafeUserAuditValue(user),
+
+      newValue: getSafeUserAuditValue(updatedUser),
+
+      userId: loggedInUser.id,
+
+      createdBy: loggedInUser.id,
+    });
+
+    return removePassword(updatedUser);
+  });
+};
+
+
