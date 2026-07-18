@@ -3,6 +3,7 @@ import { Router } from "express";
 
 import {
   signup,
+  updatePassword,
   login,
   createAdmin,
   createUser,
@@ -24,25 +25,34 @@ import {
   isAdmin,
 } from "../middleware/auth.middleware.js";
 
-import {
-  validate,
-} from "../middleware/validate.middleware.js";
+import { validate } from "../middleware/validate.middleware.js";
 
 const router = Router();
 
+<<<<<<< HEAD
 // ======================================================
 // 1. SUPER ADMIN SIGNUP
 // ======================================================
 
+=======
+>>>>>>> 947b731435aff8b13b0cd129ddb841c7a54a44d9
 router.post(
   "/signup",
   validate(signupSchema),
   signup
 );
 
+<<<<<<< HEAD
 // ======================================================
 // 2. LOGIN
 // ======================================================
+=======
+router.put(
+  "/update-password",
+  isAuth,
+  updatePassword
+);
+>>>>>>> 947b731435aff8b13b0cd129ddb841c7a54a44d9
 
 router.post(
   "/login",

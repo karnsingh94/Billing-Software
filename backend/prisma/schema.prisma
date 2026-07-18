@@ -101,11 +101,12 @@ model User {
   // Is user ne kitne users create kiye
   createdUsers User[] @relation("UserCreator")
 
-  products Product[]
-  invoices Invoice[]
-  payments Payment[]
-  returns  Return[]
-  audits   Audit[]
+  products       Product[]
+  invoices       Invoice[]
+  payments       Payment[]
+  returns        Return[]
+  audits         Audit[]
+  createdCoupons Coupon[]
 
   // Report history
   reports Report[]
@@ -218,6 +219,32 @@ model Discount {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// =========================
+// COUPON
+// =========================
+
+model Coupon {
+  id String @id @default(uuid())
+
+  couponName String
+  couponCode String @unique
+
+  discountType  DiscountType
+  discountValue Float
+
+  minOrderAmount    Float?
+  maxOrderAmount    Float?
+  maxDiscountAmount Float?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
 }
 
 // =========================
