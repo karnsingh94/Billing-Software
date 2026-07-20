@@ -54,11 +54,6 @@ router.put(
   updatePassword
 );
 
-// router.put(
-//   "/update-password",
-//   isAuth,
-//   updatePassword
-// );
 
 
 router.post(

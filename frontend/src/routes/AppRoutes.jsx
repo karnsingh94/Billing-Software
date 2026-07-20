@@ -48,9 +48,9 @@ const AppRoutes = () => {
         <Route
           path="/super-admin"
           element={
-            <ProtectedRoute allowedRole="super-admin">
+            // <ProtectedRoute allowedRole="super-admin">
               <SuperAdminLayout />
-            </ProtectedRoute>
+            // </ProtectedRoute>
           }
         >
           <Route path="dashboard" element={<SuperDashboard />} />

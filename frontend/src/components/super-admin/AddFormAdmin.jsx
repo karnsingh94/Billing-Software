@@ -207,9 +207,8 @@ const AddFormAdmin = ({ setAddFormShow, onAdminAdded }) => {
               value={formData.name}
               onChange={handleChange}
               placeholder="Enter admin's full name"
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${
-                errors.name ? "border-red-500" : "border-gray-300"
-              }`}
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${errors.name ? "border-red-500" : "border-gray-300"
+                }`}
             />
             {errors.name && (
               <p className="text-red-500 text-xs mt-1">{errors.name}</p>
@@ -231,14 +230,44 @@ const AddFormAdmin = ({ setAddFormShow, onAdminAdded }) => {
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="admin@example.com"
-                className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${
-                  errors.email ? "border-red-500" : "border-gray-300"
-                }`}
+                className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${errors.email ? "border-red-500" : "border-gray-300"
+                  }`}
               />
             </div>
             {errors.email && (
               <p className="text-red-500 text-xs mt-1">{errors.email}</p>
             )}
+          </div>
+
+          {/* Password */}
+          <div>
+            <label className="block mb-2 font-medium text-gray-700">
+              Password <span className="text-red-500">*</span>
+            </label>
+
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <FaLock />
+              </div>
+
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="Enter password"
+                className={`w-full h-12 pl-10 pr-12 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.password ? "border-red-500" : "border-gray-300"
+                  }`}
+              />
+
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+              >
+                {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+              </button>
+            </div>
           </div>
 
           {/* Phone Number */}
@@ -257,9 +286,8 @@ const AddFormAdmin = ({ setAddFormShow, onAdminAdded }) => {
                 onChange={handleChange}
                 placeholder="9876543210"
                 maxLength="10"
-                className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${
-                  errors.phone ? "border-red-500" : "border-gray-300"
-                }`}
+                className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${errors.phone ? "border-red-500" : "border-gray-300"
+                  }`}
               />
             </div>
             {errors.phone && (
@@ -267,31 +295,7 @@ const AddFormAdmin = ({ setAddFormShow, onAdminAdded }) => {
             )}
           </div>
 
-          {/* Password */}
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FaLock className="text-gray-400" />
-            </div>
 
-            <input
-              type={showPassword ? "text" : "password"}
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="Enter password"
-              className={`w-full pl-10 pr-10 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition ${
-                errors.password ? "border-red-500" : "border-gray-300"
-              }`}
-            />
-
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
-            >
-              {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
-            </button>
-          </div>
 
           {/* Confirm Password */}
           {/* <div>
@@ -336,17 +340,17 @@ const AddFormAdmin = ({ setAddFormShow, onAdminAdded }) => {
           {/* image */}
           <div>
             <label className="block text-gray-700 text-sm font-semibold mb-2">
-              Profile Image <span className="text-red-500">*</span>
+              Location<span className="text-red-500">*</span>
             </label>
 
             <input
-              type="file"
-              name="image"
-              accept="image/*"
+              type="text"
+              name="lacation"
+              placeholder="Enter Location"
+              value={formData.lacation}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg ${
-                errors.image ? "border-red-500" : "border-gray-300"
-              }`}
+              className={`w-full px-3 py-2 border rounded-lg ${errors.image ? "border-red-500" : "border-gray-300"
+                }`}
             />
 
             {errors.image && (
