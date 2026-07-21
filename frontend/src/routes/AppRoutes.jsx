@@ -54,8 +54,8 @@ const AppRoutes = () => {
           }
         >
           <Route path="dashboard" element={<SuperDashboard />} />
-          <Route path="vendors" element={<Vendors />} />
-          <Route path="vendors/create" element={<CreateVendor />} />
+          {/* <Route path="vendors" element={<Vendors />} />
+          <Route path="vendors/create" element={<CreateVendor />} /> */}
           <Route path="reports" element={<SuperReports />} />
           <Route path="settings" element={<SuperSettings />} />
           <Route path="all-admin" element={<AllAdmin />} />

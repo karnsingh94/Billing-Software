@@ -18,7 +18,7 @@ const AddFormAdmin = ({ setAddFormShow, onAdminAdded }) => {
     phone: "",
     roail: "",
     pale: "admin",
-    image: null,
+    location: "",
   });
 
   const [errors, setErrors] = useState({});
@@ -47,8 +47,8 @@ const AddFormAdmin = ({ setAddFormShow, onAdminAdded }) => {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.image) {
-      newErrors.image = "Profile image is required";
+    if (!formData.location.trim()) {
+      newErrors.location = "Location is required";
     }
 
     if (!formData.name.trim()) {
@@ -119,13 +119,37 @@ const AddFormAdmin = ({ setAddFormShow, onAdminAdded }) => {
     };
 
     // Existing admins get karo
-    const existingAdmins = JSON.parse(localStorage.getItem("admins")) || [];
+    const token = localStorage.getItem("accessToken");
 
-    // New admin add karo
-    const updatedAdmins = [...existingAdmins, newAdmin];
+    const response = await fetch(
+      "http://localhost:9000/api/v1/auth/create-admin",
+      {
+        method: "POST",
 
-    // Save in localStorage
-    localStorage.setItem("admins", JSON.stringify(updatedAdmins));
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+
+        credentials: "include",
+
+        body: JSON.stringify({
+          fullName: formData.name,
+          email: formData.email,
+          password: formData.password,
+          phone: formData.phone,
+          location: formData.location,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message);
+    }
+
+    console.log(data);
 
     console.log("Saved User:", newAdmin);
 
@@ -337,34 +361,26 @@ const AddFormAdmin = ({ setAddFormShow, onAdminAdded }) => {
               </span>
             </div>
           </div> */}
-          {/* image */}
+          {/* location */}
           <div>
             <label className="block text-gray-700 text-sm font-semibold mb-2">
-              Location<span className="text-red-500">*</span>
+              Location <span className="text-red-500">*</span>
             </label>
 
             <input
               type="text"
-              name="lacation"
+              name="location"
               placeholder="Enter Location"
-              value={formData.lacation}
+              value={formData.location}
               onChange={handleChange}
-              className={`w-full px-3 py-2 border rounded-lg ${errors.image ? "border-red-500" : "border-gray-300"
+              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.location ? "border-red-500" : "border-gray-300"
                 }`}
             />
 
-            {errors.image && (
-              <p className="text-red-500 text-xs mt-1">{errors.image}</p>
-            )}
-
-            {formData.image && (
-              <div className="mt-3">
-                <img
-                  src={URL.createObjectURL(formData.image)}
-                  alt="Preview"
-                  className="w-24 h-24 rounded-full object-cover border"
-                />
-              </div>
+            {errors.location && (
+              <p className="text-red-500 text-xs mt-1">
+                {errors.location}
+              </p>
             )}
           </div>
 
