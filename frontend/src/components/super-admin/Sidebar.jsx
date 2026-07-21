@@ -18,11 +18,11 @@ const menuItems = [
     path: "/super-admin/dashboard",
     icon: <FaHome className="text-xl" />,
   },
-  {
-    name: "Vendors",
-    path: "/super-admin/vendors",
-    icon: <FaStore className="text-xl" />,
-  },
+  // {
+  //   name: "Vendors",
+  //   path: "/super-admin/vendors",
+  //   icon: <FaStore className="text-xl" />,
+  // },
   {
     name: "Reports",
     path: "/super-admin/reports",

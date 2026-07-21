@@ -1,243 +1,266 @@
-import React, { useEffect, useState } from "react";
-import { FaCheckCircle, FaTimes, FaUserPlus } from "react-icons/fa";
+import { useEffect, useState } from "react";
+import {
+  FaCheckCircle,
+  FaTimes,
+  FaUserPlus,
+} from "react-icons/fa";
 
-const AllEditForm = ({ setEditShowForm, editData }) => {
-  // console.log(editData);
+const API_URL = import.meta.env.VITE_API_URL;
 
+const AllEditForm = ({
+  setEditShowForm,
+  editData,
+  onAdminUpdated,
+}) => {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    joinDate: "",
-    image: null,
+    phone: "",
+    location: "",
   });
 
   const [errors, setErrors] = useState({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] =
+    useState(false);
+
+  const [success, setSuccess] =
+    useState(false);
 
   useEffect(() => {
     if (editData) {
       setFormData({
-        name: editData.name || "",
+        name: editData.fullName || "",
         email: editData.email || "",
-        joinDate: editData.joinDate || "",
-        image: editData.image || null,
+        phone: editData.phone || "",
+        location: editData.location || "",
       });
     }
   }, [editData]);
 
   const handleChange = (e) => {
-    const { name, value, files } = e.target;
+    const { name, value } = e.target;
 
     setFormData((prev) => ({
       ...prev,
-      [name]: files ? files[0] : value,
+      [name]: value,
+    }));
+
+    setErrors((prev) => ({
+      ...prev,
+      [name]: "",
     }));
   };
 
-  //   image ko url me
+  const validate = () => {
+    const newErrors = {};
 
-  const convertToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
+    if (!formData.name.trim())
+      newErrors.name = "Name is required";
 
-      reader.readAsDataURL(file);
+    if (!formData.email.trim())
+      newErrors.email = "Email is required";
 
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = (error) => reject(error);
-    });
+    if (!formData.phone.trim())
+      newErrors.phone = "Phone is required";
+
+    if (!formData.location.trim())
+      newErrors.location =
+        "Location is required";
+
+    setErrors(newErrors);
+
+    return (
+      Object.keys(newErrors).length === 0
+    );
   };
-
-  //   handle submit form
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const adminData = JSON.parse(localStorage.getItem("admins")) || [];
+    if (!validate()) return;
 
-    let imageData = formData.image;
+    try {
+      setIsSubmitting(true);
 
-    // New image select hui hai
-    if (formData.image instanceof File) {
-      imageData = await convertToBase64(formData.image);
+      const token =
+        localStorage.getItem("accessToken");
+
+      const response = await fetch(
+        `${API_URL}/auth/admin/${editData.id}`,
+        {
+          method: "PUT",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+
+          credentials: "include",
+
+          body: JSON.stringify({
+            fullName: formData.name,
+            email: formData.email,
+            phone: formData.phone,
+            location: formData.location,
+          }),
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message);
+      }
+
+      setSuccess(true);
+
+      if (!response.ok) {
+        throw new Error(data.message);
+      }
+
+      alert("Admin updated successfully");
+
+      window.location.reload();
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    const updatedData = adminData.map((item) =>
-      item.id === editData.id
-        ? {
-            ...item,
-            name: formData.name,
-            totalProducts: formData.totalProducts,
-            status: formData.status,
-            image: imageData,
-          }
-        : item,
-    );
-
-    localStorage.setItem("admins", JSON.stringify(updatedData));
-
-    console.log(JSON.parse(localStorage.getItem("admins")));
-
-    setSuccess(true);
-
-    setTimeout(() => {
-      setEditShowForm(false);
-    }, 1500);
   };
 
+  if (success) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
+        <div className="bg-white rounded-xl p-8 text-center">
+          <FaCheckCircle className="text-green-600 text-5xl mx-auto mb-3" />
 
-    if (success) {
-      return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center animate-bounceIn">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FaCheckCircle className="text-green-600 text-3xl" />
-            </div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-2">Success!</h3>
-            <p className="text-gray-600">Admin   has been edit successfully.</p>
-          </div>
+          <h2 className="text-2xl font-bold">
+            Success
+          </h2>
+
+          <p>
+            Admin updated successfully.
+          </p>
         </div>
-      );
-    }
-
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 rounded-t-2xl">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                <FaUserPlus className="text-white text-xl" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">UpDate Admin</h2>
-                <p className="text-blue-100 text-sm">
-                  Create a new administrator account
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setEditShowForm(false)}
-              className="text-white/80 hover:text-white transition"
-            >
-              <FaTimes className="text-xl" />
-            </button>
+    <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-lg w-full">
+
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-5 rounded-t-xl flex justify-between items-center">
+
+          <div className="flex items-center gap-3">
+            <FaUserPlus className="text-white text-2xl" />
+
+            <h2 className="text-white text-xl font-bold">
+              Update Admin
+            </h2>
           </div>
+
+          <button
+            onClick={() =>
+              setEditShowForm(false)
+            }
+          >
+            <FaTimes className="text-white text-xl" />
+          </button>
         </div>
 
-        {/* Form  */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Full Name */}
+        <form
+          onSubmit={handleSubmit}
+          className="p-6 space-y-4"
+        >
           <div>
-            <label className="block text-gray-700 text-sm font-semibold mb-2">
-              Admin Name <span className="text-red-500">*</span>
-            </label>
+            <label>Name</label>
+
             <input
               type="text"
               name="name"
               value={formData.name}
               onChange={handleChange}
-              placeholder="Enter admin full name"
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition `}
+              className="w-full border rounded-lg p-2"
             />
-            {errors.name && (
-              <p className="text-red-500 text-xs mt-1">{errors.name}</p>
-            )}
+
+            <p className="text-red-500 text-sm">
+              {errors.name}
+            </p>
           </div>
 
-          {/* Email*/}
           <div>
-            <label className="block text-gray-700 text-sm font-semibold mb-2">
-              Email <span className="text-red-500">*</span>
-            </label>
+            <label>Email</label>
+
             <input
               type="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
-              placeholder="Enter admin full name"
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition `}
+              className="w-full border rounded-lg p-2"
             />
-            {errors.email && (
-              <p className="text-red-500 text-xs mt-1">{errors.email}</p>
-            )}
+
+            <p className="text-red-500 text-sm">
+              {errors.email}
+            </p>
           </div>
 
-          {/* JoinDate*/}
           <div>
-            <label className="block text-gray-700 text-sm font-semibold mb-2">
-              joinDate <span className="text-red-500">*</span>
-            </label>
+            <label>Phone</label>
+
             <input
-              type="gate"
-              name="joinDate"
-              value={formData.joinDate}
+              type="text"
+              name="phone"
+              value={formData.phone}
               onChange={handleChange}
-              placeholder="Enter joinDate"
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition `}
+              className="w-full border rounded-lg p-2"
             />
-            {errors.joinDate && (
-              <p className="text-red-500 text-xs mt-1">{errors.joinDate}</p>
-            )}
+
+            <p className="text-red-500 text-sm">
+              {errors.phone}
+            </p>
           </div>
 
-          {/* Image */}
           <div>
-            <label className="block text-gray-700 text-sm font-semibold mb-2">
-              Category Image
-            </label>
+            <label>Location</label>
 
-            {/* Hidden File Input */}
             <input
-              type="file"
-              id="imageUpload"
-              name="image"
-              accept="image/*"
+              type="text"
+              name="location"
+              value={formData.location}
               onChange={handleChange}
-              className="hidden"
+              className="w-full border rounded-lg p-2"
             />
 
-            {/* Clickable Image */}
-            <label htmlFor="imageUpload" className="cursor-pointer block">
-              <img
-                src={
-                  formData.image
-                    ? formData.image instanceof File
-                      ? URL.createObjectURL(formData.image)
-                      : formData.image
-                    : "https://via.placeholder.com/400x200?text=Click+to+Upload"
-                }
-                alt="Preview"
-                className="w-full h-40 object-cover rounded-lg border border-gray-300"
-              />
-            </label>
+            <p className="text-red-500 text-sm">
+              {errors.location}
+            </p>
           </div>
 
-          {/* Buttons */}
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 pt-3">
+
             <button
               type="button"
-              onClick={() => setEditShowForm(false)}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+              onClick={() =>
+                setEditShowForm(false)
+              }
+              className="flex-1 border rounded-lg py-2"
             >
               Cancel
             </button>
+
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white py-2 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+              className="flex-1 bg-blue-600 text-white rounded-lg py-2"
             >
-              {isSubmitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Adding...
-                </>
-              ) : (
-                <>Update Category</>
-              )}
+              {isSubmitting
+                ? "Updating..."
+                : "Update"}
             </button>
+
           </div>
         </form>
       </div>

@@ -6,12 +6,15 @@ import {
   FaEyeSlash,
   FaLock,
   FaPhone,
-  FaUserTag,
   FaTimes,
   FaCheckCircle,
 } from "react-icons/fa";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 const AddFormAdmin = ({ setAddFormShow, onAdminAdded }) => {
+  console.log(onAdminAdded);
+
   const [formData, setFormData] = useState({
     name: "",
     emssword: "",
@@ -87,52 +90,20 @@ const AddFormAdmin = ({ setAddFormShow, onAdminAdded }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setIsSubmitting(true);
 
-    let imageBase64 = "";
+    try {
+      const token = localStorage.getItem("accessToken");
 
-    if (formData.image) {
-      imageBase64 = await new Promise((resolve) => {
-        const reader = new FileReader();
-
-        reader.onloadend = () => {
-          resolve(reader.result);
-        };
-
-        reader.readAsDataURL(formData.image);
-      });
-    }
-
-    const newAdmin = {
-      id: Date.now(),
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-      role: formData.role,
-      image: imageBase64,
-      joinDate: new Date().toISOString().split("T")[0],
-      createdBy: "Super Admin",
-    };
-
-    // Existing admins get karo
-    const token = localStorage.getItem("accessToken");
-
-    const response = await fetch(
-      "http://localhost:9000/api/v1/auth/create-admin",
-      {
+      const response = await fetch(`${API_URL}/auth/create-admin`, {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-
         credentials: "include",
-
         body: JSON.stringify({
           fullName: formData.name,
           email: formData.email,
@@ -140,41 +111,43 @@ const AddFormAdmin = ({ setAddFormShow, onAdminAdded }) => {
           phone: formData.phone,
           location: formData.location,
         }),
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message);
-    }
-
-    console.log(data);
-
-    console.log("Saved User:", newAdmin);
-
-    setSuccess(true);
-
-    if (onAdminAdded) {
-      onAdminAdded(newAdmin);
-    }
-
-    setTimeout(() => {
-      setIsSubmitting(false);
-
-      setFormData({
-        name: "",
-        email: "",
-        password: "",
-        phone: "",
-        role: "admin",
-        image: null,
       });
 
-      setSuccess(false);
+      const data = await response.json();
 
-      setAddFormShow(false);
-    }, 1500);
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to create admin");
+      }
+
+      setSuccess(true);
+
+      // Refresh parent table
+      if (onAdminAdded) {
+        onAdminAdded();
+        window.location.reload();
+      }
+
+      setTimeout(() => {
+        setSuccess(false);
+        setAddFormShow(false);
+
+        setFormData({
+          name: "",
+          email: "",
+          password: "",
+          phone: "",
+          role: "admin",
+          image: null,
+          location: "",
+        });
+      }, 1500);
+    } catch (error) {
+      alert(error.message);
+      console.error(error);
+    } finally {
+      // Always stop loading
+      setIsSubmitting(false);
+    }
   };
 
   // Success View

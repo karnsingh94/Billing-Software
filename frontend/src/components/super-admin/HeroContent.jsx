@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { FiSearch } from "react-icons/fi";
 
-const API_URL = "http://localhost:9000/api/v1";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const HeroContent = ({ setEditShowForm, setEditData }) => {
   const [admin, setAdmin] = useState([]);
@@ -43,7 +43,7 @@ const HeroContent = ({ setEditShowForm, setEditData }) => {
       const token = localStorage.getItem("accessToken");
 
       const response = await fetch(
-        `${API_URL}/auth/admin/${id}`,
+        `${import.meta.env.VITE_API_URL}/auth/admin/${id}`,
         {
           method: "DELETE",
           headers: {
@@ -59,9 +59,13 @@ const HeroContent = ({ setEditShowForm, setEditData }) => {
         throw new Error(data.message);
       }
 
+      alert(data.message);
+
+      // Refresh list
       fetchAdmins();
-    } catch (err) {
-      console.log(err);
+
+    } catch (error) {
+      alert(error.message);
     }
   };
 
@@ -173,8 +177,8 @@ const HeroContent = ({ setEditShowForm, setEditData }) => {
                   setActionShow(actionShow === idx ? null : idx);
                 }}
                 className={`w-8 h-8 rounded-full ${actionShow === idx
-                    ? "bg-slate-600 text-white"
-                    : "hover:bg-slate-200"
+                  ? "bg-slate-600 text-white"
+                  : "hover:bg-slate-200"
                   } text-xl`}
               >
                 ⋮
@@ -185,9 +189,9 @@ const HeroContent = ({ setEditShowForm, setEditData }) => {
                   onClick={(e) => e.stopPropagation()}
                   className="absolute top-5 right-30 w-32 py-1 bg-white rounded-lg shadow-lg border border-gray-300 z-50"
                 >
-                  <button className="block w-full text-left px-4 py-1 hover:bg-gray-200">
+                  {/* <button className="block w-full text-left px-4 py-1 hover:bg-gray-200">
                     View
-                  </button>
+                  </button> */}
 
                   <button
                     onClick={() => {
@@ -279,8 +283,8 @@ const HeroContent = ({ setEditShowForm, setEditData }) => {
                     setActionShow(actionShow === idx ? null : idx);
                   }}
                   className={`w-8 h-8 rounded-full ${actionShow === idx
-                      ? "bg-slate-600 text-white"
-                      : "hover:bg-slate-200"
+                    ? "bg-slate-600 text-white"
+                    : "hover:bg-slate-200"
                     } text-xl`}
                 >
                   ⋮
@@ -291,9 +295,9 @@ const HeroContent = ({ setEditShowForm, setEditData }) => {
                     onClick={(e) => e.stopPropagation()}
                     className="absolute right-0 top-10 w-32 py-1 bg-white rounded-lg shadow-lg border border-gray-300 z-50"
                   >
-                    <button className="block w-full text-left px-4 py-2 hover:bg-gray-100">
+                    {/* <button className="block w-full text-left px-4 py-2 hover:bg-gray-100">
                       View
-                    </button>
+                    </button> */}
 
                     <button
                       onClick={() => {

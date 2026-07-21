@@ -14,6 +14,7 @@ import {
   toggleAdminStatusService,
   getAllAdminsService,
   getAllUsersService,
+  updateAdminService,
 } from "../services/auth.service.js";
 
 // ======================================================
@@ -686,6 +687,110 @@ const toggleUserStatus = async (req, res) => {
 };
 
 
+ const deleteAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const admin = await prisma.user.findUnique({
+      where: {
+        id,
+      },
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found",
+      });
+    }
+
+    if (admin.role !== "ADMIN") {
+      return res.status(400).json({
+        success: false,
+        message: "This user is not an Admin",
+      });
+    }
+
+    await prisma.user.delete({
+      where: {
+        id,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin deleted successfully",
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check user exists
+    const user = await prisma.user.findUnique({
+      where: {
+        id,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Delete user
+    await prisma.user.delete({
+      where: {
+        id,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "User deleted successfully",
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+ const updateAdmin = async (req, res) => {
+  try {
+    const admin = await updateAdminService(
+      req.params.id,
+      req.body
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin updated successfully",
+      admin,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
 export {
   signup,
   updatePassword,
@@ -698,5 +803,8 @@ export {
   getAllUsers,
   toggleAdminStatus,
   toggleUserStatus,
+  deleteAdmin,
+  deleteUser,
+  updateAdmin
 };
 

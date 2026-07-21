@@ -310,90 +310,91 @@ export const loginService = async (input) => {
 // CREATE ADMIN
 // ======================================================
 
-export const createAdminService = async (
-  input,
-  loggedInUser
-) => {
-  if (!loggedInUser?.id) {
-    throw new Error("Unauthorized user");
-  }
+  export const createAdminService = async (
+    input,
+    loggedInUser
+  ) => {
+    if (!loggedInUser?.id) {
+      throw new Error("Unauthorized user");
+    }
 
-  if (loggedInUser.role !== "SUPER_ADMIN") {
-    throw new Error(
-      "Only super admin can create admin"
-    );
-  }
-
-  const {
-    fullName,
-    email,
-    password,
-    phone,
-    location,
-  } = input;
-
-  return prisma.$transaction(async (tx) => {
-    const existingUser =
-      await findExistingUser(
-        tx,
-        email,
-        phone
-      );
-
-    if (existingUser) {
+    if (loggedInUser.role !== "SUPER_ADMIN") {
       throw new Error(
-        "Email or phone already exists"
+        "Only super admin can create admin"
       );
     }
 
-    const hashedPassword =
-      await bcrypt.hash(password, 10);
+    const {
+      fullName,
+      email,
+      password,
+      phone,
+      location,
+    } = input;
 
-    const admin =
-      await tx.user.create({
-        data: {
-          fullName: fullName.trim(),
+    return prisma.$transaction(async (tx) => {
+      const existingUser =
+        await findExistingUser(
+          tx,
+          email,
+          phone
+        );
+        
 
-          email: email
-            .trim()
-            .toLowerCase(),
+      if (existingUser) {
+        throw new Error(
+          "Email or phone already exists"
+        );
+      }
 
-          password: hashedPassword,
+      const hashedPassword =
+        await bcrypt.hash(password, 10);
 
-          phone: phone.trim(),
+      const admin =
+        await tx.user.create({
+          data: {
+            fullName: fullName.trim(),
 
-          location: location.trim(),
+            email: email
+              .trim()
+              .toLowerCase(),
 
-          role: "ADMIN",
+            password: hashedPassword,
 
-          createdById:
-            loggedInUser.id,
-        },
+            phone: phone.trim(),
+
+            location: location.trim(),
+
+            role: "ADMIN",
+
+            createdById:
+              loggedInUser.id,
+          },
+        });
+
+      await createAuditRecord({
+        database: tx,
+
+        action: "CREATE_ADMIN",
+
+        table: "User",
+
+        oldValue: null,
+
+        newValue:
+          getSafeUserAuditValue(admin),
+
+        /*
+        * Action was performed by super admin.
+        */
+        userId: loggedInUser.id,
+
+        createdBy: loggedInUser.id,
       });
 
-    await createAuditRecord({
-      database: tx,
-
-      action: "CREATE_ADMIN",
-
-      table: "User",
-
-      oldValue: null,
-
-      newValue:
-        getSafeUserAuditValue(admin),
-
-      /*
-       * Action was performed by super admin.
-       */
-      userId: loggedInUser.id,
-
-      createdBy: loggedInUser.id,
+      return removePassword(admin);
     });
-
-    return removePassword(admin);
-  });
-};
+  };
 
 // ======================================================
 // CREATE NORMAL USER
@@ -795,5 +796,24 @@ export const toggleUserStatusService = async (
     return removePassword(updatedUser);
   });
 };
+//update admin service
+export const updateAdminService = async (id, input) => {
+  const admin = await prisma.user.findUnique({
+    where: { id },
+  });
 
+  if (!admin) {
+    throw new Error("Admin not found");
+  }
+
+  return prisma.user.update({
+    where: { id },
+    data: {
+      fullName: input.fullName,
+      email: input.email,
+      phone: input.phone,
+      location: input.location,
+    },
+  });
+};
 

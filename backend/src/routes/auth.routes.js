@@ -12,6 +12,9 @@ import {
   getAllUsers,
   toggleAdminStatus,
   toggleUserStatus,
+  deleteAdmin,
+  deleteUser,
+  updateAdmin
 } from "../controllers/auth.controller.js";
 
 import {
@@ -165,6 +168,34 @@ router.patch(
   toggleUserStatus
 );
 
+// ======================================================
+// DELETE ADMIN (SUPER ADMIN)
+// ======================================================
 
+router.delete(
+  "/admin/:id",
+  isAuth,
+  isSuperAdmin,
+  deleteAdmin
+);
+
+// ======================================================
+// DELETE USER (ADMIN)
+// ======================================================
+
+router.delete(
+  "/user/:id",
+  isAuth,
+  isAdmin,
+  deleteUser
+);
+
+
+router.put(
+  "/admin/:id",
+  isAuth,
+  isSuperAdmin,
+  updateAdmin
+);
 export default router;
 
