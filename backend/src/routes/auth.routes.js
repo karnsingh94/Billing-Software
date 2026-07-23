@@ -14,14 +14,15 @@ import {
   toggleUserStatus,
   deleteAdmin,
   deleteUser,
-  updateAdmin
+  updateAdmin,
+  updateUser,
 } from "../controllers/auth.controller.js";
-
 import {
   signupSchema,
   loginSchema,
   createAdminSchema,
   createUserSchema,
+    updateUserSchema,
 } from "../schema/auth.schema.js";
 
 import {
@@ -197,5 +198,20 @@ router.put(
   isSuperAdmin,
   updateAdmin
 );
+
+
+// ======================================================
+// UPDATE USER (ADMIN)
+// ======================================================
+
+router.put(
+  "/user-update/:id",
+  isAuth,
+  isAdmin,
+  validate(updateUserSchema),
+  updateUser
+);
+
+
 export default router;
 

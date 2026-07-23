@@ -69,8 +69,7 @@ export const createProductController = async (
     }
 
     const productImage = req.file
-      ? `/uploads/${req.file.filename}`
-      : null;
+
 
     const product =
       await createProductService(
@@ -93,7 +92,8 @@ export const createProductController = async (
               ? Number(req.body.stock)
               : 0,
 
-          productImage,
+          productImage:productImage.path.replace(/\\/g, "/")
+  ,
         },
         userId
       );
@@ -182,6 +182,7 @@ export const updateProductController = async (
 ) => {
   try {
     const userId = req.user?.id;
+    const productImage = req.file
 
     if (!userId) {
       return res.status(401).json({
@@ -216,9 +217,9 @@ export const updateProductController = async (
         Number(req.body.stock);
     }
 
-    if (req.file) {
-      updateData.productImage =
-        `/uploads/${req.file.filename}`;
+    if (productImage) {
+      updateData.productImage = productImage.path.replace(/\\/g, "/")
+  
     } else if (
       req.body.productImage !== undefined
     ) {

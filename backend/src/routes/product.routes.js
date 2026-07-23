@@ -18,8 +18,8 @@ import {
 import {
   validate,
 } from "../middleware/validate.middleware.js";
+import upload from "../middleware/upload.middleware.js"
 
-import upload from "../middleware/upload.middleware.js";
 
 import {
   isAuth,
@@ -32,7 +32,7 @@ router.post(
   "/create-product",
   isAuth,
   isProduct,
-  upload.single("productImage"),
+  upload.single(["productImage"]),
   validate(createProductSchema),
   createProductController
 );
@@ -45,24 +45,25 @@ router.get(
 );
 
 router.get(
-  "/:id",
+  "/get-products/:id",
   isAuth,
   validate(productIdSchema),
   getProductByIdController
 );
 
+
 router.put(
-  "/:id",
+  "/update-product/:id",
   isAuth,
   isProduct,
-  upload.single("productImage"),
+  upload.single(["productImage"]),
   validate(productIdSchema),
   validate(updateProductSchema),
   updateProductController
 );
 
 router.delete(
-  "/:id",
+  "/delete-product/:id",
   isAuth,
   isProduct,
   validate(productIdSchema),

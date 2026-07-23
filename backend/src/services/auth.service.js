@@ -817,3 +817,161 @@ export const updateAdminService = async (id, input) => {
   });
 };
 
+
+
+// ======================================================
+// UPDATE USER
+// ======================================================
+
+export const updateUserService = async (
+  userId,
+  input,
+  loggedInUser
+) => {
+  if (!loggedInUser?.id) {
+    throw new Error("Unauthorized user");
+  }
+
+  if (loggedInUser.role !== "ADMIN") {
+    throw new Error(
+      "Only admin can update user"
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const existingUser =
+      await tx.user.findFirst({
+        where: {
+          id: userId,
+          role: "USER",
+          deletedAt: null,
+          createdById: loggedInUser.id,
+        },
+      });
+
+    if (!existingUser) {
+      throw new Error(
+        "User not found or you are not allowed to update this user"
+      );
+    }
+
+    const {
+      fullName,
+      email,
+      phone,
+      location,
+    } = input;
+
+    // Email duplicate check
+    if (email !== undefined) {
+      const normalizedEmail =
+        email.trim().toLowerCase();
+
+      const emailExists =
+        await tx.user.findFirst({
+          where: {
+            email: normalizedEmail,
+
+            id: {
+              not: userId,
+            },
+
+            deletedAt: null,
+          },
+        });
+
+      if (emailExists) {
+        throw new Error(
+          "Email already exists"
+        );
+      }
+    }
+
+    // Phone duplicate check
+    if (phone !== undefined) {
+      const normalizedPhone =
+        phone.trim();
+
+      const phoneExists =
+        await tx.user.findFirst({
+          where: {
+            phone: normalizedPhone,
+
+            id: {
+              not: userId,
+            },
+
+            deletedAt: null,
+          },
+        });
+
+      if (phoneExists) {
+        throw new Error(
+          "Phone already exists"
+        );
+      }
+    }
+
+    const updateData = {};
+
+    if (fullName !== undefined) {
+      updateData.fullName =
+        fullName.trim();
+    }
+
+    if (email !== undefined) {
+      updateData.email =
+        email.trim().toLowerCase();
+    }
+
+    if (phone !== undefined) {
+      updateData.phone =
+        phone.trim();
+    }
+
+    if (location !== undefined) {
+      updateData.location =
+        location.trim();
+    }
+
+    const updatedUser =
+      await tx.user.update({
+        where: {
+          id: userId,
+        },
+
+        data: updateData,
+      });
+
+    await createAuditRecord({
+      database: tx,
+
+      action: "UPDATE_USER",
+
+      table: "User",
+
+      oldValue:
+        getSafeUserAuditValue(
+          existingUser
+        ),
+
+      newValue:
+        getSafeUserAuditValue(
+          updatedUser
+        ),
+
+      userId:
+        loggedInUser.id,
+
+      createdBy:
+        loggedInUser.id,
+
+      updatedBy:
+        loggedInUser.id,
+    });
+
+    return removePassword(
+      updatedUser
+    );
+  });
+};

@@ -1,6 +1,7 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import path from "path";
 
 import authRouter from "./routes/auth.routes.js";
 import productRouter from "./routes/product.routes.js";
@@ -10,6 +11,7 @@ import discountRoutes from "./routes/discount.routes.js";
 import invoiceItemRoutes from "./routes/invoiceItem.routes.js";
 import dateRangeReportRouter from "./routes/period-report.routes.js";
 import couponRoutes from "./routes/coupon.routes.js";
+import { fileURLToPath } from "url";
 
 const app = express();
 
@@ -24,9 +26,21 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
+
+const _filename = fileURLToPath(import.meta.url);
+const _dirname = path.dirname(_filename);
+app.use(
+  "/uploads",
+  express.static(
+    path.join(  process.cwd(),
+ "uploads")
+  )
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
 
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/products", productRouter);

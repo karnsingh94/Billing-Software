@@ -22,11 +22,11 @@ const menuItems = [
     path: "/admin/user",
     icon: <FaUsers />,
   },
-  {
-    name: "Categories",
-    path: "/admin/categories",
-    icon: <FaListAlt />,
-  },
+  // {
+  //   name: "Categories",
+  //   path: "/admin/categories",
+  //   icon: <FaListAlt />,
+  // },
   {
     name: "Products",
     path: "/admin/products",

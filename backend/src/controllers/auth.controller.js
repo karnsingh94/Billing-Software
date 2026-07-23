@@ -15,6 +15,7 @@ import {
   getAllAdminsService,
   getAllUsersService,
   updateAdminService,
+  updateUserService,
 } from "../services/auth.service.js";
 
 // ======================================================
@@ -791,6 +792,52 @@ const deleteUser = async (req, res) => {
 };
 
 
+// ======================================================
+// UPDATE USER
+// PUT /api/v1/auth/user/:id
+// ======================================================
+
+const updateUser = async (
+  req,
+  res
+) => {
+  try {
+    const loggedInUser =
+      req.user;
+
+    const { id } =
+      req.params;
+
+    if (!loggedInUser?.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized user",
+      });
+    }
+
+    const user =
+      await updateUserService(
+        id,
+        req.body,
+        loggedInUser
+      );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "User updated successfully",
+      user,
+    });
+  } catch (error) {
+    return sendErrorResponse(
+      res,
+      error,
+      "Failed to update user"
+    );
+  }
+};
+
+
 export {
   signup,
   updatePassword,
@@ -805,6 +852,6 @@ export {
   toggleUserStatus,
   deleteAdmin,
   deleteUser,
-  updateAdmin
+  updateAdmin,
+  updateUser,
 };
-

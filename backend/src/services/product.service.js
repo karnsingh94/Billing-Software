@@ -390,40 +390,34 @@ export const deleteProductService = async (
       throw new Error("Product not found");
     }
 
-    const deletedProduct =
-      await tx.product.update({
-        where: {
-          id: productId,
-        },
-
-        data: {
-          deletedAt: new Date(),
-          deletedBy: userId,
-        },
-      });
-
     await createAuditRecord({
       tx,
       action: "DELETE_PRODUCT",
       oldValue: existingProduct,
 
       newValue: {
-        id: deletedProduct.id,
-        deletedAt:
-          deletedProduct.deletedAt,
-        deletedBy:
-          deletedProduct.deletedBy,
+        id: existingProduct.id,
+        productName:
+          existingProduct.productName,
+        permanentlyDeleted: true,
+        deletedBy: userId,
+        deletedAt: new Date(),
       },
 
       userId,
     });
 
+    const deletedProduct =
+      await tx.product.delete({
+        where: {
+          id: productId,
+        },
+      });
+
     return {
       id: deletedProduct.id,
       productName:
         deletedProduct.productName,
-      deletedAt:
-        deletedProduct.deletedAt,
     };
   });
 };

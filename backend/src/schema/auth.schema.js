@@ -110,3 +110,38 @@ export const createAdminSchema = z.object({
 export const createUserSchema = z.object({
   body: createAccountBodySchema,
 });
+
+
+
+// ======================================================
+// UPDATE USER
+// ======================================================
+
+export const updateUserSchema = z.object({
+  params: z.object({
+    id: z
+      .string({
+        required_error: "User id is required",
+      })
+      .trim()
+      .min(1, "User id is required"),
+  }),
+
+  body: z
+    .object({
+      fullName: fullNameSchema.optional(),
+
+      email: emailSchema.optional(),
+
+      phone: phoneSchema.optional(),
+
+      location: locationSchema.optional(),
+    })
+    .strict()
+    .refine(
+      (data) => Object.keys(data).length > 0,
+      {
+        message: "At least one field is required for update",
+      }
+    ),
+});
