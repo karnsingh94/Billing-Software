@@ -15,7 +15,11 @@ import {
   deleteAdmin,
   deleteUser,
   updateAdmin,
+<<<<<<< HEAD
   updateUser,
+=======
+  getUsersByAdmin
+>>>>>>> 29c59a8 (feat: add admin users management page and functionality to fetch users by admin)
 } from "../controllers/auth.controller.js";
 import {
   signupSchema,
@@ -199,6 +203,7 @@ router.put(
   updateAdmin
 );
 
+<<<<<<< HEAD
 
 // ======================================================
 // UPDATE USER (ADMIN)
@@ -213,5 +218,14 @@ router.put(
 );
 
 
+=======
+router.get(
+  "/admin/:id/users",
+  isAuth,
+  isSuperAdmin,
+  getUsersByAdmin
+);
+
+>>>>>>> 29c59a8 (feat: add admin users management page and functionality to fetch users by admin)
 export default router;
 

@@ -16,6 +16,7 @@ import SuperSettings from "../pages/super-admin/Settings";
 import AllAdmin from "../pages/super-admin/AllAdmin";
 import AllUser from "../pages/super-admin/AllUser";
 import Profile from "../pages/super-admin/Profile";
+import AdminUsers from "../pages/super-admin/AdminUsers";
 
 /* Admin */
 import AdminDashboard from "../pages/admin/Dashboard";
@@ -49,7 +50,7 @@ const AppRoutes = () => {
           path="/super-admin"
           element={
             // <ProtectedRoute allowedRole="super-admin">
-              <SuperAdminLayout />
+            <SuperAdminLayout />
             // </ProtectedRoute>
           }
         >
@@ -61,7 +62,9 @@ const AppRoutes = () => {
           <Route path="all-admin" element={<AllAdmin />} />
           <Route path="all-user" element={<AllUser />} />
           <Route path="/super-admin/Profile" element={<Profile />} />
+          <Route path="admin-users/:adminId" element={<AdminUsers />}/>
         </Route>
+
 
         {/* Admin */}
         <Route path="/admin" element={<AdminLayout />}>

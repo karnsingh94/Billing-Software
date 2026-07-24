@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FiSearch } from "react-icons/fi";
+import { useNavigate } from "react-router-dom";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -7,6 +8,8 @@ const HeroContent = ({ setEditShowForm, setEditData }) => {
   const [admin, setAdmin] = useState([]);
   const [actionShow, setActionShow] = useState(null);
   const [search, setSearch] = useState("");
+
+  const navigate = useNavigate();
 
   // ================= Fetch Admins =================
   const fetchAdmins = async () => {
@@ -204,6 +207,16 @@ const HeroContent = ({ setEditShowForm, setEditData }) => {
                     Edit
                   </button>
 
+                   <button
+                    onClick={() => {
+                     navigate(`/super-admin/admin-users/${admin.id}`);
+                      setActionShow(null);
+                    }}
+                    className="block w-full text-left px-4 py-1 hover:bg-gray-200"
+                  >
+                    View Users
+                  </button>
+
                   <button
                     onClick={() => {
                       DeleteAdmin(item.id);
@@ -213,6 +226,8 @@ const HeroContent = ({ setEditShowForm, setEditData }) => {
                   >
                     Delete
                   </button>
+
+                 
                 </div>
               )}
             </div>
@@ -308,6 +323,15 @@ const HeroContent = ({ setEditShowForm, setEditData }) => {
                       className="block w-full text-left px-4 py-2 hover:bg-gray-100"
                     >
                       Edit
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate(`/admin-users/${item.id}`);
+                        setActionShow(null);
+                      }}
+                      className="block w-full text-left px-4 py-1 hover:bg-gray-200"
+                    >
+                      View Users
                     </button>
 
                     <button

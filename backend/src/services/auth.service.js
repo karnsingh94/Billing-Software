@@ -818,6 +818,7 @@ export const updateAdminService = async (id, input) => {
 };
 
 
+<<<<<<< HEAD
 
 // ======================================================
 // UPDATE USER
@@ -973,5 +974,10 @@ export const updateUserService = async (
     return removePassword(
       updatedUser
     );
+=======
+export const getUsersByAdminService = async (adminId) => {
+  return await User.find({
+    createdBy: adminId,
+>>>>>>> 29c59a8 (feat: add admin users management page and functionality to fetch users by admin)
   });
 };

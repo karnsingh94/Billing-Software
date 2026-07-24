@@ -15,7 +15,11 @@ import {
   getAllAdminsService,
   getAllUsersService,
   updateAdminService,
+<<<<<<< HEAD
   updateUserService,
+=======
+  getUsersByAdminService
+>>>>>>> 29c59a8 (feat: add admin users management page and functionality to fetch users by admin)
 } from "../services/auth.service.js";
 
 // ======================================================
@@ -791,6 +795,24 @@ const deleteUser = async (req, res) => {
   }
 };
 
+ const getUsersByAdmin = async (req, res) => {
+  try {
+    const users = await User.find({
+      createdBy: req.params.id,
+    });
+
+    res.status(200).json({
+      success: true,
+      users,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
 
 // ======================================================
 // UPDATE USER
@@ -853,5 +875,9 @@ export {
   deleteAdmin,
   deleteUser,
   updateAdmin,
+<<<<<<< HEAD
   updateUser,
+=======
+  getUsersByAdmin
+>>>>>>> 29c59a8 (feat: add admin users management page and functionality to fetch users by admin)
 };

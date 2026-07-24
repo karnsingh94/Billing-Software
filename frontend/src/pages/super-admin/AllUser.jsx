@@ -8,20 +8,20 @@ const AllUser = () => {
   const [addFormShow, setAddFormShow] = useState(false)
   const [editShowForm, setEditShowForm] = useState(false)
   const [editData, setEditData] = useState('')
-  const title1 = "Add New User"
-  const title2 = "Create and manage user for vendors/company."
-  const btn = "+ Add User"
+  // const title1 = "Add New User"
+  // const title2 = "Create and manage user for vendors/company."
+  // const btn = "+ Add User"
   return (
     <div>
-      <div>
+      {/* <div>
         <AddCard   showForm={setAddFormShow} title1={title1} title2={title2} btn={btn} />
-      </div>
-      <div>
+      </div> */}
+      {/* <div>
         {addFormShow && <UserAddForm setAddFormShow={setAddFormShow} />}
       </div>
       <div>
         {editShowForm&& <UserEditForm  setEditShowForm={setEditShowForm} editData={editData}/>}
-      </div>
+      </div> */}
       <div>
         <UserHeroContent setEditShowForm={setEditShowForm} setEditData={setEditData}/>
       </div>
